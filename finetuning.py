@@ -46,8 +46,8 @@ class VQADataset(torch.utils.data.Dataset):
         for k,v in encoding.items():  encoding[k] = v.squeeze()
         return encoding
 
-training_dataset = load_dataset("json", data_files="Data/train.jsonl", split="train[:90%]")
-valid_dataset = load_dataset("json", data_files="Data/train.jsonl", split="train[90%:]")
+training_dataset = load_dataset("json", data_files="Data/train.jsonl", split="train")
+valid_dataset = load_dataset("json", data_files="Data/train.jsonl", split="train")
 print("Training sets: {} - Validating set: {}".format(len(training_dataset), len(valid_dataset)))
 
 train_dataset = VQADataset(dataset=training_dataset,
