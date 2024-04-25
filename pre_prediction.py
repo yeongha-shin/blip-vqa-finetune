@@ -18,6 +18,22 @@ processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 # model = BlipForQuestionAnswering.from_pretrained("Model/blip-saved-model").to("cuda")
 model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to("cuda")
 
+print(model)
+
+# from peft import LoraConfig, get_peft_model
+#
+# # Let's define the LoraConfig
+# config = LoraConfig(
+#     r=16,
+#     lora_alpha=32,
+#     lora_dropout=0.05,
+#     bias="none",
+#     target_modules=["query", "value"]
+# )
+#
+# model = get_peft_model(model, config)
+# model.print_trainable_parameters()
+
 # Create a list to store the results
 results = []
 
