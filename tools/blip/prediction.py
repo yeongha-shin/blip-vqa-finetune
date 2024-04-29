@@ -9,30 +9,13 @@ import torch
 import os
 
 # Set the path to your test data directory
-test_data_dir = "Data/test_data/"
+test_data_dir = "../../Data/test_data/"
 
 # processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 # model = ViltForQuestionAnswering.from_pretrained("test_model/checkpoint-525")
 
 processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
-# model = BlipForQuestionAnswering.from_pretrained("Model/blip-saved-model").to("cuda")
-model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base").to("cuda")
-
-print(model)
-
-# from peft import LoraConfig, get_peft_model
-#
-# # Let's define the LoraConfig
-# config = LoraConfig(
-#     r=16,
-#     lora_alpha=32,
-#     lora_dropout=0.05,
-#     bias="none",
-#     target_modules=["query", "value"]
-# )
-#
-# model = get_peft_model(model, config)
-# model.print_trainable_parameters()
+model = BlipForQuestionAnswering.from_pretrained("Model/blip-saved-model").to("cuda")
 
 # Create a list to store the results
 results = []
@@ -67,13 +50,13 @@ for filename in tqdm(samples, desc="Processing"):
     # Prepare inputs
     encoding = processor(image, question, return_tensors="pt").to("cuda:0", torch.float16)
 
-    out = model.generate(**encoding)
+    out = model.generate(**encoding, max_new_tokens=45)
     generated_text = processor.decode(out[0], skip_special_tokens=True)
 
     results.append((image_id, generated_text))
 
 # Write the results to a CSV file
-csv_file_path = "Results/pre_results.csv"
+csv_file_path = "../../Results/results.csv"
 os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
 
 with open(csv_file_path, mode="w", newline="") as csv_file:

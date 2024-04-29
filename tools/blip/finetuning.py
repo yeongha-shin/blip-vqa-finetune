@@ -125,5 +125,5 @@ for epoch in range(num_epochs):
         if early_stopping_hook > patience:
             break
     
-pickle.dump(tracking_information, open("tracking_information.pkl", "wb"))
+pickle.dump(tracking_information, open("../../tracking_information.pkl", "wb"))
 print("The finetuning process has done!")

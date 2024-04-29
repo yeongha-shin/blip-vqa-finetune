@@ -2,6 +2,8 @@ import os
 
 import requests
 from transformers import BlipProcessor, BlipForQuestionAnswering
+# from transformers import Blip2Processor, Blip2ForConditionalGeneration
+
 from datasets import load_dataset
 import torch
 from PIL import Image
@@ -10,9 +12,15 @@ from tqdm import tqdm
 import pickle
 
 import bitsandbytes as bnb
+# TODO: blip 2 test !
 
 model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
 processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+#
+# processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+# # model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to("cuda")
+# model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", device_map="auto", load_in_8bit=True) # load in int8
+
 
 from peft import LoraConfig, get_peft_model
 
@@ -49,21 +57,21 @@ class VQADataset(torch.utils.data.Dataset):
         question = self.dataset[idx]['question']
         answer = self.dataset[idx]['answer']
         image_id = self.dataset[idx]['pid']
-        image_path = f"New_Data/train_fill_in_blank/train_fill_in_blank/{image_id}/image.png"
+        image_path = f"Data/train_explain_situation/{image_id}/image.png"
         image = Image.open(image_path).convert("RGB")
         text = question
         
         encoding = self.processor(image, text, padding="max_length", truncation=True, return_tensors="pt")
         labels = self.processor.tokenizer.encode(
-            answer, max_length= 8, pad_to_max_length=True, return_tensors='pt'
+            answer, max_length= 45, pad_to_max_length=True, return_tensors='pt'
         )
         encoding["labels"] = labels
         # remove batch dimension
         for k,v in encoding.items():  encoding[k] = v.squeeze()
         return encoding
 
-training_dataset = load_dataset("json", data_files="New_Data/train.jsonl", split="train[:90%]")
-valid_dataset = load_dataset("json", data_files="New_Data/train.jsonl", split="train[90%:]")
+training_dataset = load_dataset("json", data_files="Data/total_train.jsonl", split="train[:90%]")
+valid_dataset = load_dataset("json", data_files="Data/total_train.jsonl", split="train[90%:]")
 print("Training sets: {} - Validating set: {}".format(len(training_dataset), len(valid_dataset)))
 
 train_dataset = VQADataset(dataset=training_dataset,
@@ -145,6 +153,6 @@ for epoch in range(num_epochs):
         if early_stopping_hook > patience:
             break
 
-pickle.dump(tracking_information, open("tracking_information.pkl", "wb"))
+pickle.dump(tracking_information, open("../../tracking_information.pkl", "wb"))
 print("The finetuning process has done!")
 
