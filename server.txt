@@ -4,4 +4,5 @@
 conda install conda-forge::transformers
 참고 링크 -> https://pypi.org/project/transformers/
 
-3. 
+3. conda install -c anaconda pillow
+
