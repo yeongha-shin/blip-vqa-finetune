@@ -14,3 +14,8 @@ AssertionError: Torch not compiled with CUDA enabled
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit==11.4 -c pytorch -c nvidia -c conda-forge
 
 https://jjuke-brain.tistory.com/entry/GPU-%EC%84%9C%EB%B2%84-%EC%82%AC%EC%9A%A9%EB%B2%95-CUDA-PyTorch-%EB%B2%84%EC%A0%84-%EB%A7%9E%EC%B6%94%EA%B8%B0-%EC%B4%9D%EC%A0%95%EB%A6%AC
+
+근데 그래도 안되어서 GPT한테 물어봐서 아래와 같이 진행했다
+conda install cudatoolkit=11.3
+conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+
