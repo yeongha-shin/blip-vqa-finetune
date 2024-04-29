@@ -2,7 +2,7 @@ import os
 
 import requests
 from transformers import BlipProcessor, BlipForQuestionAnswering
-# from transformers import Blip2Processor, Blip2ForConditionalGeneration
+from transformers import Blip2Processor, Blip2ForConditionalGeneration
 
 from datasets import load_dataset
 import torch
@@ -17,9 +17,9 @@ import bitsandbytes as bnb
 model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
 processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
 #
-# processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
 # # model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to("cuda")
-# model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", device_map="auto", load_in_8bit=True) # load in int8
+model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", device_map="auto", load_in_8bit=True) # load in int8
 
 
 from peft import LoraConfig, get_peft_model

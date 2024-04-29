@@ -2,6 +2,8 @@ import os
 
 import requests
 from transformers import BlipProcessor, BlipForQuestionAnswering
+from transformers import AutoProcessor, Blip2ForConditionalGeneration
+
 from datasets import load_dataset
 import torch
 from PIL import Image
@@ -9,8 +11,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import pickle
 
-model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
-processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+# model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
+# processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+
+processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+# # model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to("cuda")
+model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", device_map="auto", load_in_8bit=True) # load in int8
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
