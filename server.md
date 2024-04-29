@@ -23,3 +23,12 @@ conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit
 위와 같이 하니까 blip2도 결과가 잘 나왔다.
 하지만 데이터 셋 생성을 하려고 opencv 를 설치하기 시작하니까
 바로 cuda버전이 꼬이는 현상이 발생했음 !
+
+1. pre prediction
+
+2. finetune
+   이걸 수행하려니까 용량이 넘친다고 하더라 !~
+   그래서 accerate이랑 bitetobypes를 설치
+   
+conda install -c conda-forge accelerate
+   conda install conda-forge::bitsandbytes
