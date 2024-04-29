@@ -12,7 +12,7 @@ import torch
 import os
 
 # Set the path to your test data directory
-test_data_dir = "../../Data/test_data/"
+test_data_dir = "./Data/test_data/"
 
 # processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
 # model = ViltForQuestionAnswering.from_pretrained("test_model/checkpoint-525")
@@ -84,7 +84,7 @@ for filename in tqdm(samples, desc="Processing"):
     results.append((image_id, generated_text))
 
 # Write the results to a CSV file
-csv_file_path = "../../Results/pre_results.csv"
+csv_file_path = "./Results/pre_results.csv"
 os.makedirs(os.path.dirname(csv_file_path), exist_ok=True)
 
 with open(csv_file_path, mode="w", newline="") as csv_file:
