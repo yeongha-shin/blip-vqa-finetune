@@ -1,3 +1,4 @@
+# 환경 셋팅
 1. conda install pytorch
 2. conda install transformers
 이렇게 했더니, import가 안되어서 아래와 같이 변경함
