@@ -6,3 +6,11 @@ conda install conda-forge::transformers
 
 3. conda install -c anaconda pillow
 
+4. torch version이 안맞게 설치했는지 이런 오류가 나왔따
+AssertionError: Torch not compiled with CUDA enabled
+
+그래서 아래와 같이 버전에 맞게 재 설치를 진행했다 
+
+conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit==11.4 -c pytorch -c nvidia -c conda-forge
+
+https://jjuke-brain.tistory.com/entry/GPU-%EC%84%9C%EB%B2%84-%EC%82%AC%EC%9A%A9%EB%B2%95-CUDA-PyTorch-%EB%B2%84%EC%A0%84-%EB%A7%9E%EC%B6%94%EA%B8%B0-%EC%B4%9D%EC%A0%95%EB%A6%AC
