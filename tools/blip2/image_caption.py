@@ -14,7 +14,7 @@
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig, Blip2Model, Blip2ForConditionalGeneration
+from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig
 
 from peft import LoraConfig, get_peft_model
 from PIL import Image
@@ -27,14 +27,8 @@ config = LoraConfig(
     bias="none",
 )
 
-torch.cuda.empty_cache()
-torch.manual_seed(42)
-
 # We load our model and processor using `transformers`
-# model = AutoModelForVision2Seq.from_pretrained(
-#     "Salesforce/blip2-opt-2.7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
-# )
-model = Blip2ForConditionalGeneration.from_pretrained(
+model = AutoModelForVision2Seq.from_pretrained(
     "Salesforce/blip2-opt-2.7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
 )
 processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
@@ -50,44 +44,23 @@ model.print_trainable_parameters()
 
 
 class ImageCaptioningDataset(Dataset):
-    def __init__(self, dataset, processor, max_length=128):
+    def __init__(self, dataset, processor):
         self.dataset = dataset
         self.processor = processor
-        self.max_length = max_length
 
     def __len__(self):
         return len(self.dataset)
 
     def __getitem__(self, idx):
         # item = self.dataset[idx]
-        question = "What kinds of objects are there?"
         image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
         # encoding = self.processor(images=item["image"], padding="max_length", return_tensors="pt")
-        # encoding = self.processor(images=image, padding="max_length", return_tensors="pt")
-        encoding = self.processor(image, question, padding="max_length", truncation=True, return_tensors="pt", max_length=self.max_length)
-        # encoding = self.processor(image, padding="max_length", truncation=True, return_tensors="pt",
-        #                           max_length=self.max_length)
-        # labels = self.processor.tokenizer.encode(
-        #     answer, max_length= 45, pad_to_max_length=True, return_tensors='pt'
-        # )
-        #
+        encoding = self.processor(images=image, padding="max_length", return_tensors="pt")
+
         # remove batch dimension
-        # encoding = {k: v.squeeze() for k, v in encoding.items()}
-
-        for k, v in encoding.items():  encoding[k] = v.squeeze()
-
+        encoding = {k: v.squeeze() for k, v in encoding.items()}
         # encoding["text"] = item["text"]
         encoding["text"] = "There are 6 ships and 1 red buoy."
-
-        # # # TODO : add labels
-        #
-        # targets = torch.zeros(6)
-        # labels = ['down', 'at table', 'skateboard', 'table']
-        # scores = [1.0, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333]
-        # for label, score in zip(labels, scores):
-        #     targets[label] = score
-        # encoding["labels"] = targets
-
         return encoding
 
 
@@ -109,7 +82,6 @@ dataset = load_dataset("json", data_files="Data/total_train.jsonl", split="train
 
 train_dataset = ImageCaptioningDataset(dataset, processor)
 train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=2, collate_fn=collator)
-
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
@@ -135,14 +107,5 @@ for epoch in range(50):
         optimizer.zero_grad()
 
         if idx % 10 == 0:
-            image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
-
-            # Prepare inputs
-            question = "What kinds of objects are there?"
-            # encoding = processor(image, question, return_tensors="pt").to(device, torch.float16)
-            encoding = processor(image, question, return_tensors="pt").to(device, torch.float16)
-
-            generated_output = model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'], max_length =30)
+            generated_output = model.generate(pixel_values=pixel_values)
             print(processor.batch_decode(generated_output, skip_special_tokens=True))
-            # out = model.generate(**encoding, max_length = 30)
-            # print(processor.batch_decode(out[0], skip_special_tokens=True))
