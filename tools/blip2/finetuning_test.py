@@ -79,6 +79,7 @@ class ImageCaptioningDataset(Dataset):
         # encoding["text"] = item["text"]
         encoding["text"] = "There are 6 ships and 1 red buoy."
 
+
         # # # TODO : add labels
         #
         # targets = torch.zeros(6)
