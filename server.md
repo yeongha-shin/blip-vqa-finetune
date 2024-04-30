@@ -32,3 +32,11 @@ conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit
    
 conda install -c conda-forge accelerate
    conda install conda-forge::bitsandbytes
+
+그리고 peft도 설치해야 했다 
+근데 peft는 pip만 지원해서, 이렇게 되면 pip로 그냥 설치하게 되면base에 영향을 주게 되는데,
+conda install pip를 진행한 이후에
+pip install peft를 수행했다
+(그냥 conda install peft는 import가 정상적으로 되지 않았다)
+
+
