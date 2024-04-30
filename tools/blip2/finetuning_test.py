@@ -89,6 +89,7 @@ train_dataset = VQADataset(dataset=training_dataset,
 valid_dataset = VQADataset(dataset=valid_dataset,
                            processor=processor)
 
+
 # batch_size = 1  # 12
 # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
 # valid_dataloader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
