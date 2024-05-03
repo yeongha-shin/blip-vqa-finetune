@@ -354,10 +354,8 @@ for epoch in range(50):
         print("Loss:", loss.item())
 
         loss.backward()
-
         optimizer.step()
         optimizer.zero_grad()
-
 
         ### detr model train
         # labels = [{k: v.to(device) for k, v in t.items()} for t in batch['labels']]
