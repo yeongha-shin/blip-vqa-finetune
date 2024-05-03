@@ -348,14 +348,21 @@ for epoch in range(50):
 
         detr_outputs = detr_model(pixel_values=upsampled_features[0].unsqueeze(0), labels=labels)
 
-        loss = outputs.loss
-        # detr_loss = detr_
+        detr_loss = sum(detr_outputs.losses.values())
+        total_loss = outputs.loss + detr_loss
 
-        print("Loss:", loss.item())
+        print("Loss:", total_loss.item())
 
-        loss.backward()
+        # loss.backward()
+        # optimizer.step()
+        # optimizer.zero_grad()
+
+        total_loss.backward()
         optimizer.step()
+        detr_optimizer.step()
+
         optimizer.zero_grad()
+        detr_optimizer.zero_grad()
 
         ### detr model train
         # labels = [{k: v.to(device) for k, v in t.items()} for t in batch['labels']]
