@@ -34,6 +34,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(device)
 detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
+print(detr_model.config)
 
 # output_dim = detr_model.config.d_model
 
@@ -125,9 +126,23 @@ class ProjectionLayer(nn.Module):
     def __init__(self, text_dim, image_dim, output_dim):
         super(ProjectionLayer, self).__init__()
         # 텍스트 데이터 차원을 출력 차원에 맞추는 선형 변환
-        self.text_projection = nn.Linear(text_dim, output_dim)
+        # self.text_projection = nn.Linear(text_dim, output_dim)
+        # # 이미지 데이터 차원을 출력 차원에 맞추는 선형 변환
+        # self.image_projection = nn.Linear(image_dim, output_dim)
+
+        self.text_projection = nn.Sequential(
+            nn.Linear(text_dim, text_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(text_dim, output_dim),
+            nn.Dropout(0.0)
+        )
         # 이미지 데이터 차원을 출력 차원에 맞추는 선형 변환
-        self.image_projection = nn.Linear(image_dim, output_dim)
+        self.image_projection = nn.Sequential(
+            nn.Linear(image_dim, image_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(image_dim, output_dim),
+            nn.Dropout(0.0)
+        )
 
     def forward(self, text_features, image_features):
         # 각각의 피처를 프로젝션
@@ -242,7 +257,7 @@ class ImageCaptioningDataset(Dataset):
     def __getitem__(self, idx):
         # item = self.dataset[idx]
         question = "What kinds of objects are there?"
-        image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
+        image = Image.open("Data/test_data/0/image.png").convert("RGB")
         # encoding = self.processor(images=item["image"], padding="max_length", return_tensors="pt")
         # encoding = self.processor(images=image, padding="max_length", return_tensors="pt")
         encoding = self.processor(image, question, padding="max_length", truncation=True, return_tensors="pt", max_length=self.max_length)
@@ -348,7 +363,7 @@ for epoch in range(50):
 
         detr_outputs = detr_model(pixel_values=upsampled_features[0].unsqueeze(0), labels=labels)
 
-        detr_loss = sum(detr_outputs.losses.values())
+        detr_loss = detr_outputs.loss
         total_loss = outputs.loss + detr_loss
 
         print("Loss:", total_loss.item())
@@ -368,7 +383,7 @@ for epoch in range(50):
         # labels = [{k: v.to(device) for k, v in t.items()} for t in batch['labels']]
 
         if idx % 10 == 0:
-            image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
+            image = Image.open("Data/test_data/0/image.png").convert("RGB")
 
             # Prepare inputs
             question = "What kinds of objects are there?"
