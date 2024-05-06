@@ -160,6 +160,14 @@ class ProjectionLayer(nn.Module):
         combined_features = torch.relu(text_projected + image_projected)
         return combined_features
 
+    def set_train_mode(self):
+        self.text_projection.train()
+        self.image_projection.train()
+
+    def set_eval_mode(self):
+        self.text_projection.eval()
+        self.image_projection.eval()
+
 class FeatureUpsample(nn.Module):
     def __init__(self, input_dim, output_channels, target_height, target_width):
         super(FeatureUpsample, self).__init__()
@@ -319,6 +327,9 @@ detr_model.train()
 for epoch in range(50):
     print("Epoch:", epoch)
     for idx, batch in enumerate(train_dataloader):
+
+        projection_layer.set_train_mode()
+
         input_ids = batch.pop("input_ids").to(device)
         pixel_values = batch.pop("pixel_values").to(device, torch.float16)
 
