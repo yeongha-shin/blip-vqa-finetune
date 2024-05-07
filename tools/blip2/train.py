@@ -173,7 +173,7 @@ class CustomModel(torch.nn.Module):
 
     def detect_and_show_objects_custom(self, upsampled_feature, labels):
         upsampled_feature.to(device)
-        labels.to(device)
+        # labels.to(device)
 
         single_pixel_mask = torch.ones((1, 750, 1333), dtype=torch.float32, device=device)
 
