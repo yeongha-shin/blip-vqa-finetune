@@ -262,6 +262,7 @@ class ProjectionLayer(nn.Module):
         self.text_projection.eval()
         self.image_projection.eval()
 
+
 class FeatureUpsample(nn.Module):
     def __init__(self, input_dim, output_channels, target_height, target_width):
         super(FeatureUpsample, self).__init__()
