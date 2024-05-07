@@ -156,7 +156,7 @@ class CustomModel(torch.nn.Module):
         }]
 
         # DETR output
-        inputs = self.detr_processorimage_processor(images=image, return_tensors="pt")
+        inputs = self.detr_processor(images=image, return_tensors="pt")
         # detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
         detr_result, detr_outputs = self.detect_and_show_objects_custom(image, inputs, labels)
         #
@@ -188,6 +188,9 @@ class CustomModel(torch.nn.Module):
         # inputs = detr_processor(images=image, return_tensors="pt")
 
         inputs = upsampled_feature
+
+        torch.no_grad()
+
         outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
