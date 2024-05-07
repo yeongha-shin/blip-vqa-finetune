@@ -129,7 +129,7 @@ class CustomModel(torch.nn.Module):
         # Projection Layer
         self.projection_layer = ProjectionLayer(text_dim=2560, image_dim=1408, output_dim=256)
 
-    def forward(self, input_ids, pixel_values=None, **kwargs):
+    def forward(self, image, input_ids, pixel_values=None, **kwargs):
         # BLIP output
         blip_outputs = self.blip_model(input_ids=input_ids, pixel_values=pixel_values, **kwargs )
 
@@ -153,7 +153,7 @@ class CustomModel(torch.nn.Module):
             "iscrowd": torch.tensor([0], dtype=torch.int64, device=device)  # Optional, 객체 인스턴스를 설명하는 상태
         }]
 
-        detr_result, detr_outputs = self.detect_and_show_objects_custom(upsampled_features, labels)
+        detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
 
         return blip_outputs, detr_outputs
 
@@ -171,7 +171,7 @@ class CustomModel(torch.nn.Module):
                 processed_batch["attention_mask"] = text_inputs["attention_mask"]
         return processed_batch
 
-    def detect_and_show_objects_custom(self, upsampled_feature, labels):
+    def detect_and_show_objects_custom(self, image, upsampled_feature, labels):
         upsampled_feature.to(device)
         # labels.to(device)
 
@@ -179,7 +179,6 @@ class CustomModel(torch.nn.Module):
 
         inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
 
-        print(inputs)
         outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
@@ -194,7 +193,7 @@ class CustomModel(torch.nn.Module):
         for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
             if score > 0.5:  # Filter detections with confidence above 50%
                 x1, y1, x2, y2 = box.tolist()
-                print("Box coordinates:", x1, y1, x2, y2)  # These are now plain float values
+                # print("Box coordinates:", x1, y1, x2, y2)  # These are now plain float values
 
                 # Draw rectangle on the image
                 rect = patches.Rectangle((x1, y1), x2 - x1, y2 - y1, linewidth=1, edgecolor='r', facecolor='none')
@@ -205,7 +204,7 @@ class CustomModel(torch.nn.Module):
                 # rect = patches.Rectangle((x, y), width - x, height - y, linewidth=1, edgecolor='r', facecolor='none')
                 # ax.add_patch(rect)
         #         ax.text(x, y, f'{detr_model.config.id2label[label.item()]}: {score:.2f}', bbox=dict(facecolor='yellow', alpha=0.5))
-                print((x1, y1), x2 - x1, y2 - y1, "score :", score)
+        #         print((x1, y1), x2 - x1, y2 - y1, "score :", score)
 
         plt.save("Detr_result.png")
         plt.show()
@@ -243,8 +242,8 @@ class ProjectionLayer(nn.Module):
 
         text_projected = self.text_projection(text_features.mean(dim=1))
         image_projected = self.image_projection(image_features.mean(dim=1))
-        print("text projected", text_projected.shape)
-        print("image projected", image_projected.shape)
+        # print("text projected", text_projected.shape)
+        # print("image projected", image_projected.shape)
 
         # 두 피처를 합치기 (여기서는 단순 합을 사용)
         combined_features = torch.relu(text_projected + image_projected)
@@ -300,7 +299,9 @@ for epoch in range(50):
         input_ids = batch.pop("input_ids").to(device)
         pixel_values = batch.pop("pixel_values").to(device, torch.float16)
 
-        blip_outputs, detr_outputs = model(input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, output_hidden_states=True)
+        image = Image.open("Data/test_data/0/image.png").convert("RGB")
+
+        blip_outputs, detr_outputs = model(image, input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, output_hidden_states=True)
 
         loss = blip_outputs.loss
 
@@ -312,8 +313,6 @@ for epoch in range(50):
         optimizer.zero_grad()
 
         if idx % 10 == 0:
-            image = Image.open("Data/test_data/0/image.png").convert("RGB")
-
             # Prepare inputs
             question = "What kinds of objects are there?"
             # encoding = processor(image, question, return_tensors="pt").to(device, torch.float16)
