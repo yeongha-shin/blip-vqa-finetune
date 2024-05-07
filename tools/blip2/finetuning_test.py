@@ -120,6 +120,7 @@ model.train()
 
 for epoch in range(50):
     print("Epoch:", epoch)
+
     for idx, batch in enumerate(train_dataloader):
         input_ids = batch.pop("input_ids").to(device)
         pixel_values = batch.pop("pixel_values").to(device, torch.float16)
