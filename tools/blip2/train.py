@@ -156,9 +156,11 @@ class CustomModel(torch.nn.Module):
         }]
 
         # DETR output
-        #detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
         inputs = self.detr_processorimage_processor(images=image, return_tensors="pt")
-        detr_outputs = self.detr_model(**inputs)
+        # detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
+        detr_result, detr_outputs = self.detect_and_show_objects_custom(image, inputs, labels)
+        #
+        # detr_outputs = self.detr_model(**inputs)
 
         return blip_outputs, detr_outputs
 
@@ -185,6 +187,7 @@ class CustomModel(torch.nn.Module):
         inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
         # inputs = detr_processor(images=image, return_tensors="pt")
 
+        inputs = upsampled_feature
         outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
