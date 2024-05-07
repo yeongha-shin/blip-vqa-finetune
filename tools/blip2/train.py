@@ -88,7 +88,7 @@ class ImageCaptioningDataset(Dataset):
         question = "What kinds of objects are there?"
         # image_path = item["image_path"]
         # image = Image.open(image_path).convert("RGB")
-        image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
+        image = Image.open("Data/test_data/0/image.png").convert("RGB")
         encoding = self.processor(image, question, padding="max_length", truncation=True, return_tensors="pt",
                                   max_length=self.max_length)
 
@@ -316,7 +316,7 @@ for epoch in range(50):
         optimizer.zero_grad()
 
         if idx % 10 == 0:
-            image = Image.open("/home/yeongha/pycharm/blip-vqa-finetune/Data/test_data/0/image.png").convert("RGB")
+            image = Image.open("Data/test_data/0/image.png").convert("RGB")
 
             # Prepare inputs
             question = "What kinds of objects are there?"
