@@ -184,7 +184,7 @@ class CustomModel(torch.nn.Module):
 
         single_pixel_mask = torch.ones((1, 750, 1333), dtype=torch.float32, device=device)
 
-        inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
+        # inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
         # inputs = detr_processor(images=image, return_tensors="pt")
 
         inputs = upsampled_feature
