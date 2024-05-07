@@ -155,7 +155,10 @@ class CustomModel(torch.nn.Module):
             "iscrowd": torch.tensor([0], dtype=torch.int64, device=device)  # Optional, 객체 인스턴스를 설명하는 상태
         }]
 
-        detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
+        # DETR output
+        #detr_result, detr_outputs = self.detect_and_show_objects_custom(image, upsampled_features, labels)
+        inputs = self.detr_processorimage_processor(images=image, return_tensors="pt")
+        detr_outputs = self.detr_model(**inputs)
 
         return blip_outputs, detr_outputs
 
