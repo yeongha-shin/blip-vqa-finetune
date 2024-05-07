@@ -179,11 +179,10 @@ class CustomModel(torch.nn.Module):
 
         single_pixel_mask = torch.ones((1, 750, 1333), dtype=torch.float32, device=device)
 
-        # inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
-        inputs = self.detr_processor(images=image)
+        inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
+        # inputs = detr_processor(images=image, return_tensors="pt")
 
-        # outputs = self.detr_model(**inputs, labels=labels)
-        outputs = self.detr_model(**inputs)
+        outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
         results = self.detr_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]))[
