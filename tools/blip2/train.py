@@ -182,7 +182,8 @@ class CustomModel(torch.nn.Module):
         # inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
         inputs = self.detr_processor(images=image)
 
-        outputs = self.detr_model(**inputs, labels=labels)
+        # outputs = self.detr_model(**inputs, labels=labels)
+        outputs = self.detr_model(**inputs)
 
         # Process DETR outputs
         results = self.detr_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]))[
