@@ -1,3 +1,5 @@
+import os
+
 import torch
 import torch.nn as nn
 from datasets import load_dataset
@@ -206,7 +208,7 @@ class CustomModel(torch.nn.Module):
         #         ax.text(x, y, f'{detr_model.config.id2label[label.item()]}: {score:.2f}', bbox=dict(facecolor='yellow', alpha=0.5))
         #         print((x1, y1), x2 - x1, y2 - y1, "score :", score)
 
-        plt.save("Detr_result.png")
+        plt.savefig(os.path.join("Detr_result.png"))
         plt.show()
 
         return results, outputs
