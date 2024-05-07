@@ -144,10 +144,6 @@ class CustomModel(torch.nn.Module):
         upsample_model = FeatureUpsample(feature_length, target_channels, target_height, target_width).to(device)
         upsampled_features = upsample_model(fused_features)  # Resulting shape will be [1, 3, 750, 1333]
 
-        single_pixel_mask = torch.ones((1, 750, 1333), dtype=torch.float32, device=device)
-        upsampled_features.to(device)
-
-        inputs = {'pixel_values': upsampled_features[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
         labels = [{
             "class_labels": torch.tensor([9], device=device),  # 클래스 ID
             "boxes": torch.tensor([[1141, 433, 1529, 608]], dtype=torch.float32, device=device),
@@ -157,7 +153,7 @@ class CustomModel(torch.nn.Module):
             "iscrowd": torch.tensor([0], dtype=torch.int64, device=device)  # Optional, 객체 인스턴스를 설명하는 상태
         }]
 
-        detr_outputs = self.detr_model(pixel_values=upsampled_features[0].unsqueeze(0), labels=labels)
+        detr_result, detr_outputs = self.detect_and_show_objects_custom(upsampled_features, labels)
 
         return blip_outputs, detr_outputs
 
@@ -175,18 +171,16 @@ class CustomModel(torch.nn.Module):
                 processed_batch["attention_mask"] = text_inputs["attention_mask"]
         return processed_batch
 
-    def detect_and_show_objects_custom(self, upsampled_feature):
+    def detect_and_show_objects_custom(self, upsampled_feature, labels):
         upsampled_feature.to(device)
-
-        inputs = self.detr_processor(images=image, return_tensors="pt")
+        labels.to(device)
 
         single_pixel_mask = torch.ones((1, 750, 1333), dtype=torch.float32, device=device)
-        upsampled_feature.to(device)
 
         inputs = {'pixel_values': upsampled_feature[0].unsqueeze(0), 'pixel_mask': single_pixel_mask}
 
         print(inputs)
-        outputs = self.detr_model(**inputs)
+        outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
         results = self.detr_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([image.size[::-1]]))[
@@ -213,8 +207,10 @@ class CustomModel(torch.nn.Module):
         #         ax.text(x, y, f'{detr_model.config.id2label[label.item()]}: {score:.2f}', bbox=dict(facecolor='yellow', alpha=0.5))
                 print((x1, y1), x2 - x1, y2 - y1, "score :", score)
 
+        plt.save("Detr_result.png")
         plt.show()
-        return results
+
+        return results, outputs
 
 class ProjectionLayer(nn.Module):
     def __init__(self, text_dim, image_dim, output_dim):
