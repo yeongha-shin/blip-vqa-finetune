@@ -274,7 +274,7 @@ image = Image.open("Data/image.png")
 width, height = image.size
 postprocessed_outputs = processor.post_process_object_detection(outputs,
                                                                 target_sizes=[(height, width)],
-                                                                threshold=0.7)
+                                                                threshold=0.0)
 results = postprocessed_outputs[0]
 plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
