@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
-from transformers import DetrForObjectDetection
+from transformers import DetrForObjectDetection, AutoProcessor
 import torch
 
 from pytorch_lightning import Trainer
@@ -42,11 +42,11 @@ class CocoDetection(torchvision.datasets.CocoDetection):
 
         return pixel_values, target
 
-
+blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
-train_dataset = CocoDetection(img_folder='./', processor=detr_processor)
-val_dataset = CocoDetection(img_folder='./', processor=detr_processor, train=False)
+train_dataset = CocoDetection(img_folder='./', processor=blip_processor)
+val_dataset = CocoDetection(img_folder='./', processor=blip_processor, train=False)
 
 print("Number of training examples:", len(train_dataset))
 print("Number of validation examples:", len(val_dataset))
@@ -79,7 +79,7 @@ image.save("ImageDraw.png")
 
 def collate_fn(batch):
   pixel_values = [item[0] for item in batch]
-  encoding = detr_processor.pad(pixel_values, return_tensors="pt")
+  encoding = blip_processor.pad(pixel_values, return_tensors="pt")
   labels = [item[1] for item in batch]
   batch = {}
   batch['pixel_values'] = encoding['pixel_values']
