@@ -263,6 +263,7 @@ def plot_results(pil_img, scores, labels, boxes):
                 bbox=dict(facecolor='yellow', alpha=0.5))
     plt.axis('off')
     plt.show()
+    plt.savefig(os.path.join("Detr_finetune.png"))
 
 # load image based on ID
 image_id = target['image_id'].item()
