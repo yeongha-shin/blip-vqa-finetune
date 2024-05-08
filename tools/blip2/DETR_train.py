@@ -198,7 +198,7 @@ def load_checkpoint(checkpoint_path, model_class):
     model = model_class.load_from_checkpoint(checkpoint_path)
     return model
 
-checkpoint_path = './Model/DETR/detr-epoch=08-val_loss=0.49.pth'  # Adjust to your saved checkpoint
+checkpoint_path = './Model/DETR/detr-epoch=08-val_loss=0.49.ckpt'  # Adjust to your saved checkpoint
 loaded_model = load_checkpoint(checkpoint_path, Detr)
 
 def convert_to_xywh(boxes):
