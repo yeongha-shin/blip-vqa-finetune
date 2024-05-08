@@ -164,7 +164,7 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
