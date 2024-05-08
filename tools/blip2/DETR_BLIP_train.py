@@ -88,12 +88,23 @@ image.save("ImageDraw.png")
 
 def collate_fn(batch):
   pixel_values = [item[0] for item in batch]
-  encoding = blip_processor.pad(pixel_values, return_tensors="pt")
+  encoding = detr_processor.pad(pixel_values, return_tensors="pt")
   labels = [item[1] for item in batch]
   batch = {}
   batch['pixel_values'] = encoding['pixel_values']
   batch['pixel_mask'] = encoding['pixel_mask']
   batch['labels'] = labels
+
+  for key in batch[0].keys():
+      if key != "text":
+          batch[key] = torch.stack([example[key] for example in batch])
+      else:
+          text_inputs = blip_processor.tokenizer(
+              [example["text"] for example in batch], padding=True, return_tensors="pt"
+          )
+          batch["input_ids"] = text_inputs["input_ids"]
+          batch["attention_mask"] = text_inputs["attention_mask"]
+
   return batch
 
 train_dataloader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=4, shuffle=True)
