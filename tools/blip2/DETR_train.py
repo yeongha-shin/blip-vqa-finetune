@@ -131,12 +131,21 @@ class Detr(pl.LightningModule):
 
         return loss
 
+    # def validation_step(self, batch, batch_idx):
+    #     loss, loss_dict = self.common_step(batch, batch_idx)
+    #     self.log("validation_loss", loss)
+    #     for k, v in loss_dict.items():
+    #         self.log("validation_" + k, v.item())
+    #
+    #     return loss
+
     def validation_step(self, batch, batch_idx):
         loss, loss_dict = self.common_step(batch, batch_idx)
-        self.log("validation_loss", loss)
+        # Log the validation loss to ensure `ModelCheckpoint` can track it
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        # Log other validation metrics for additional monitoring
         for k, v in loss_dict.items():
             self.log("validation_" + k, v.item())
-
         return loss
 
     def configure_optimizers(self):
@@ -163,11 +172,11 @@ model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
 checkpoint_callback = ModelCheckpoint(
-    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
-    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
-    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
-    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
-    mode='min',  # val_loss가 감소하는 경우에 저장
+    monitor='val_loss',  # Ensure this matches the key used to log the validation loss
+    dirpath='./Model/DETR/',
+    filename='detr-{epoch:02d}-{val_loss:.2f}',
+    save_top_k=3,
+    mode='min',
 )
 
 trainer = Trainer(
