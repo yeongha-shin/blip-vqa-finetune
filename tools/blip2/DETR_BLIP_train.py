@@ -23,10 +23,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class CocoDetection(torchvision.datasets.CocoDetection):
-    def __init__(self, img_folder, processor, train=True):
+    def __init__(self, img_folder, blip_processor, detr_processor ,train=True):
         ann_file = os.path.join(img_folder, "Data/custom_train.json" if train else "Data/custom_val.json")
         super(CocoDetection, self).__init__(img_folder, ann_file)
-        self.processor = processor
+        self.blip_processor = blip_processor
+        self.detr_processor = detr_processor
 
     def __getitem__(self, idx):
         # read in PIL image and target in COCO format
@@ -36,17 +37,23 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         # preprocess image and target (converting target to DETR format, resizing + normalization of both image and target)
         image_id = self.ids[idx]
         target = {'image_id': image_id, 'annotations': target}
-        encoding = self.processor(images=img, annotations=target, return_tensors="pt")
-        pixel_values = encoding["pixel_values"].squeeze() # remove batch dimension
-        target = encoding["labels"][0] # remove batch dimension
+
+        question = "What kinds of objects are there?"
+        blip_encoding = self.blip_processor(image, question, return_tensors="pt")
+        detr_encoding = self.detr_processor(images=img, annotations=target, return_tensors="pt")
+        pixel_values = blip_encoding["pixel_values"].squeeze() # remove batch dimension
+        # target = encoding["labels"][0] # remove batch dimension
+        target = detr_encoding["labels"][0]  # remove batch dimension
+
+        blip_encoding["text"] = "There are 6 ships and 1 red buoy at [LOC]."
 
         return pixel_values, target
 
 blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
-train_dataset = CocoDetection(img_folder='./', processor=blip_processor)
-val_dataset = CocoDetection(img_folder='./', processor=blip_processor, train=False)
+train_dataset = CocoDetection(img_folder='./', blip_processor, detr_processor)
+val_dataset = CocoDetection(img_folder='./', blip_processor, detr_processor, train=False)
 
 print("Number of training examples:", len(train_dataset))
 print("Number of validation examples:", len(val_dataset))
