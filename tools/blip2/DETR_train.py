@@ -278,3 +278,5 @@ postprocessed_outputs = processor.post_process_object_detection(outputs,
                                                                 threshold=0.0)
 results = postprocessed_outputs[0]
 plot_results(image, results['scores'], results['labels'], results['boxes'])
+
+print("end of algorithm")
