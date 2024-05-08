@@ -97,7 +97,7 @@ print(batch.keys())
 
 
 class Detr(pl.LightningModule):
-    def __init__(self, lr, lr_backbone, weight_decay):
+    def __init__(self, lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4):
         super().__init__()
         # replace COCO classification head with custom head
         # we specify the "no_timm" variant here to not rely on the timm library
@@ -193,13 +193,17 @@ trainer = Trainer(
 )
 # trainer.fit(model)
 
-def load_checkpoint(checkpoint_path, model_class):
-    # Load the model from the checkpoint
-    model = model_class.load_from_checkpoint(checkpoint_path)
+def load_checkpoint(checkpoint_path, model_class, lr, lr_backbone, weight_decay):
+    model = model_class.load_from_checkpoint(
+        checkpoint_path,
+        lr=lr,
+        lr_backbone=lr_backbone,
+        weight_decay=weight_decay
+    )
     return model
 
 checkpoint_path = './Model/DETR/detr-epoch=08-val_loss=0.49.ckpt'  # Adjust to your saved checkpoint
-loaded_model = load_checkpoint(checkpoint_path, Detr)
+loaded_model = load_checkpoint(checkpoint_path, Detr, lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
 
 def convert_to_xywh(boxes):
     xmin, ymin, xmax, ymax = boxes.unbind(1)
