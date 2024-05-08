@@ -39,7 +39,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         target = {'image_id': image_id, 'annotations': target}
 
         question = "What kinds of objects are there?"
-        blip_encoding = self.blip_processor(image, question, return_tensors="pt")
+        blip_encoding = self.blip_processor(img, question, return_tensors="pt")
         detr_encoding = self.detr_processor(images=img, annotations=target, return_tensors="pt")
         pixel_values = blip_encoding["pixel_values"].squeeze() # remove batch dimension
         # target = encoding["labels"][0] # remove batch dimension
