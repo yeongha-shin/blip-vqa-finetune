@@ -52,7 +52,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
 blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
-train_dataset = CocoDetection(img_folder='./', blip_processor, detr_processor)
+train_dataset = CocoDetection(img_folder='./', blip_processor, detr_processor, train=True)
 val_dataset = CocoDetection(img_folder='./', blip_processor, detr_processor, train=False)
 
 print("Number of training examples:", len(train_dataset))
