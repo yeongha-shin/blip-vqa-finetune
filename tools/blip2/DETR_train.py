@@ -191,7 +191,7 @@ trainer = Trainer(
     gradient_clip_val=0.1,
     callbacks=[checkpoint_callback],  # ModelCheckpoint 콜백 추가
 )
-trainer.fit(model)
+# trainer.fit(model)
 
 def load_checkpoint(checkpoint_path, model_class):
     # Load the model from the checkpoint
