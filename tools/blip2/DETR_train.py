@@ -95,7 +95,7 @@ print(batch.keys())
 
 
 class Detr(pl.LightningModule):
-    def __init__(self, lr, lr_backbone, weight_decay):
+    def __init__(self, lr, lr_backbone, weight_decay, id2label):
         super().__init__()
         # replace COCO classification head with custom head
         # we specify the "no_timm" variant here to not rely on the timm library
@@ -108,6 +108,7 @@ class Detr(pl.LightningModule):
         self.lr = lr
         self.lr_backbone = lr_backbone
         self.weight_decay = weight_decay
+        self.id2label = id2label  # Adding the id2label mapping to the class
 
     def forward(self, pixel_values, pixel_mask):
         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
@@ -250,19 +251,17 @@ print("Outputs:", outputs.keys())
 COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
           [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
 
-def plot_results(pil_img, scores, labels, boxes):
-    plt.figure(figsize=(16,10))
+def plot_results(pil_img, scores, labels, boxes, id2label):
+    plt.figure(figsize=(16, 10))
     plt.imshow(pil_img)
     ax = plt.gca()
     colors = COLORS * 100
-    for score, label, (xmin, ymin, xmax, ymax),c  in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
-                                   fill=False, color=c, linewidth=3))
-        text = f'{model.config.id2label[label]}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15,
-                bbox=dict(facecolor='yellow', alpha=0.5))
+    for score, label, (xmin, ymin, xmax, ymax), c in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
+        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=c, linewidth=3))
+        text = f'{id2label[label]}: {score:0.2f}'
+        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
     plt.axis('off')
-    plt.savefig(os.path.join("Detr_finetune.png"))
+    plt.savefig("Detr_finetune.png")
     plt.show()
 
 
@@ -277,6 +276,6 @@ postprocessed_outputs = processor.post_process_object_detection(outputs,
                                                                 target_sizes=[(height, width)],
                                                                 threshold=0.0)
 results = postprocessed_outputs[0]
-plot_results(image, results['scores'], results['labels'], results['boxes'])
+plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
 print("end of algorithm")
