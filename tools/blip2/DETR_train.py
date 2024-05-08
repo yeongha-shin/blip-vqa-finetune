@@ -28,3 +28,8 @@ processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
 train_dataset = CocoDetection(img_folder='./', processor=processor)
 val_dataset = CocoDetection(img_folder='./', processor=processor, train=False)
+
+print("Number of training examples:", len(train_dataset))
+print("Number of validation examples:", len(val_dataset))
+
+print("training examples:", train_dataset[0])
