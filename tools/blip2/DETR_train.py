@@ -1,90 +1,121 @@
-
 import torchvision
 import os
+
 from transformers import DetrImageProcessor
+
 import numpy as np
+import os
 from PIL import Image, ImageDraw
+
 from torch.utils.data import DataLoader
+
 import pytorch_lightning as pl
 from transformers import DetrForObjectDetection
 import torch
+
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
-from coco_eval import CocoEvaluator
-from tqdm import tqdm  # tqdm.notebook에서 tqdm으로 변경
-import matplotlib.pyplot as plt
 
-# 만약 CUDA가 가능하다면, GPU를 사용하고 그렇지 않다면 CPU를 사용합니다.
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, processor, train=True):
         ann_file = os.path.join(img_folder, "Data/custom_train.json" if train else "Data/custom_val.json")
-        super().__init__(img_folder, ann_file)
+        super(CocoDetection, self).__init__(img_folder, ann_file)
         self.processor = processor
 
     def __getitem__(self, idx):
-        img, target = super().__getitem__(idx)
+        # read in PIL image and target in COCO format
+        # feel free to add data augmentation here before passing them to the next step
+        img, target = super(CocoDetection, self).__getitem__(idx)
+
+        # preprocess image and target (converting target to DETR format, resizing + normalization of both image and target)
         image_id = self.ids[idx]
         target = {'image_id': image_id, 'annotations': target}
-
-        # 이미지 및 타깃을 전처리하고 DETR 포맷으로 변환
         encoding = self.processor(images=img, annotations=target, return_tensors="pt")
-        pixel_values = encoding["pixel_values"].squeeze().to(device)  # 디바이스로 전송
-        target = encoding["labels"][0]  # 배치 차원 제거
+        pixel_values = encoding["pixel_values"].squeeze() # remove batch dimension
+        target = encoding["labels"][0] # remove batch dimension
 
         return pixel_values, target
 
 
-# DETR 모델 초기화
 processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
 train_dataset = CocoDetection(img_folder='./', processor=processor)
 val_dataset = CocoDetection(img_folder='./', processor=processor, train=False)
 
+print("Number of training examples:", len(train_dataset))
+print("Number of validation examples:", len(val_dataset))
 
-# 배치 함수 정의
+print("training examples:", train_dataset[0])
+
+# based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
+image_ids = train_dataset.coco.getImgIds()
+# let's pick a random image
+image_id = image_ids[np.random.randint(0, len(image_ids))]
+print('Image n°{}'.format(image_id))
+image = train_dataset.coco.loadImgs(image_id)[0]
+image = Image.open("Data/image.png")
+
+annotations = train_dataset.coco.imgToAnns[image_id]
+draw = ImageDraw.Draw(image, "RGBA")
+
+cats = train_dataset.coco.cats
+id2label = {k: v['name'] for k,v in cats.items()}
+
+for annotation in annotations:
+  box = annotation['bbox']
+  class_idx = annotation['category_id']
+  x,y,w,h = tuple(box)
+  draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
+  draw.text((x, y), id2label[class_idx], fill='white')
+
+image.show()
+image.save("ImageDraw.png")
+
 def collate_fn(batch):
-    pixel_values = [item[0] for item in batch]
-    encoding = processor.pad(pixel_values, return_tensors="pt")
-    labels = [{k: v.to(device) for k, v in item[1].items()} for item in batch]
-
-    batch = {
-        'pixel_values': encoding['pixel_values'].to(device),
-        'pixel_mask': encoding['pixel_mask'].to(device),
-        'labels': labels,
-    }
-
-    return batch
-
+  pixel_values = [item[0] for item in batch]
+  encoding = processor.pad(pixel_values, return_tensors="pt")
+  labels = [item[1] for item in batch]
+  batch = {}
+  batch['pixel_values'] = encoding['pixel_values']
+  batch['pixel_mask'] = encoding['pixel_mask']
+  batch['labels'] = labels
+  return batch
 
 train_dataloader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=4, shuffle=True)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=2)
+batch = next(iter(train_dataloader))
+
+print(batch.keys())
 
 
 class Detr(pl.LightningModule):
-    def __init__(self, lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4):
+    def __init__(self, lr, lr_backbone, weight_decay):
         super().__init__()
+        # replace COCO classification head with custom head
+        # we specify the "no_timm" variant here to not rely on the timm library
+        # for the convolutional backbone
+        self.model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+                                                            revision="no_timm",
+                                                            num_labels=len(id2label),
+                                                            ignore_mismatched_sizes=True)
+        # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
         self.lr = lr
         self.lr_backbone = lr_backbone
         self.weight_decay = weight_decay
-        self.model = DetrForObjectDetection.from_pretrained(
-            "facebook/detr-resnet-50",
-            revision="no_timm",
-            num_labels=len(id2label),
-            ignore_mismatched_sizes=True
-        ).to(device)  # 모델을 디바이스로 전송
 
     def forward(self, pixel_values, pixel_mask):
         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
         return outputs
 
     def common_step(self, batch, batch_idx):
-        pixel_values = batch["pixel_values"].to(device)
-        pixel_mask = batch["pixel_mask"].to(device)
-        labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+        pixel_values = batch["pixel_values"]
+        pixel_mask = batch["pixel_mask"]
+        labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
 
         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
         loss = outputs.loss
         loss_dict = outputs.loss_dict
 
@@ -92,6 +123,8 @@ class Detr(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, loss_dict = self.common_step(batch, batch_idx)
+        # logs metrics for each training_step,
+        # and the average across the epoch
         self.log("training_loss", loss)
         for k, v in loss_dict.items():
             self.log("train_" + k, v.item())
@@ -100,9 +133,10 @@ class Detr(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss, loss_dict = self.common_step(batch, batch_idx)
-        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
+        self.log("validation_loss", loss)
         for k, v in loss_dict.items():
             self.log("validation_" + k, v.item())
+
         return loss
 
     def configure_optimizers(self):
@@ -113,7 +147,9 @@ class Detr(pl.LightningModule):
                 "lr": self.lr_backbone,
             },
         ]
-        optimizer = torch.optim.AdamW(param_dicts, lr=self.lr, weight_decay=self.weight_decay)
+        optimizer = torch.optim.AdamW(param_dicts, lr=self.lr,
+                                      weight_decay=self.weight_decay)
+
         return optimizer
 
     def train_dataloader(self):
@@ -122,50 +158,26 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-
-# 모델을 생성하고 디바이스로 전송
 model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
-model.to(device)
+
+outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
 checkpoint_callback = ModelCheckpoint(
-    monitor='val_loss',
-    dirpath='./Model/DETR/',
-    filename='detr',
-    save_top_k=1,
-    mode='min',
+    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
+    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
+    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
+    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
+    mode='min',  # val_loss가 감소하는 경우에 저장
 )
 
-trainer = Trainer(
-    max_epochs=10,
-    gradient_clip_val=0.1,
-    callbacks=[checkpoint_callback],
-)
-
-# 이제 모델을 트레이닝
+trainer = Trainer(max_steps=1, gradient_clip_val=0.1)
 trainer.fit(model)
 
-
-# 체크포인트 로드 함수
-def load_checkpoint(checkpoint_path, model_class, lr, lr_backbone, weight_decay):
-    model = model_class.load_from_checkpoint(
-        checkpoint_path,
-        lr=lr,
-        lr_backbone=lr_backbone,
-        weight_decay=weight_decay,
-    )
-    model.to(device)  # 디바이스로 전송
-    return model
-
-
-checkpoint_path = './Model/DETR/detr.ckpt'
-loaded_model = load_checkpoint(checkpoint_path, Detr, lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
-
-
-# DETR 평가
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model.to(device)
 def convert_to_xywh(boxes):
     xmin, ymin, xmax, ymax = boxes.unbind(1)
     return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
-
 
 def prepare_for_coco_detection(predictions):
     coco_results = []
@@ -173,7 +185,8 @@ def prepare_for_coco_detection(predictions):
         if len(prediction) == 0:
             continue
 
-        boxes = convert_to_xywh(prediction["boxes"]).tolist()
+        boxes = prediction["boxes"]
+        boxes = convert_to_xywh(boxes).tolist()
         scores = prediction["scores"].tolist()
         labels = prediction["labels"].tolist()
 
@@ -189,53 +202,3 @@ def prepare_for_coco_detection(predictions):
             ]
         )
     return coco_results
-
-
-# CocoEvaluator 초기화
-evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-
-print("Running evaluation...")
-for idx, batch in enumerate(tqdm(val_dataloader)):
-    pixel_values = batch["pixel_values"].to(device)
-    pixel_mask = batch["pixel_mask"].to(device)
-    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-
-    # 모델 예측
-    with torch.no_grad():
-        outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-    results = processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-
-    predictions = {target["image_id"].item(): output for target, output in zip(labels, results)}
-    predictions = prepare_for_coco_detection(predictions)
-    evaluator.update(predictions)
-
-evaluator.synchronize_between_processes()
-evaluator.accumulate()
-evaluator.summarize()
-
-# 평가 결과 출력
-pixel_values, target = val_dataset[0]
-pixel_values = pixel_values.unsqueeze(0).to(device)
-
-with torch.no_grad():
-    outputs = model(pixel_values=pixel_values, pixel_mask=None)
-print("Outputs:", outputs.keys())
-
-# 결과 시각화
-COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125], [0.494, 0.184, 0.556],
-          [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
-
-
-def plot_results(pil_img, scores, labels, boxes):
-    plt.figure(figsize=(16, 10))
-    plt.imshow(pil_img)
-    ax = plt.gca()
-    colors = COLORS * 100
-    for score, label, (xmin, ymin, xmax, ymax), color in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=color, linewidth=3))
-        text = f'{model.config.id2label[label]}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
-    plt.axis("off")
-    plt.show()
