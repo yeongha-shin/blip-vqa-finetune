@@ -13,6 +13,10 @@ import pytorch_lightning as pl
 from transformers import DetrForObjectDetection
 import torch
 
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
+
+
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, processor, train=True):
         ann_file = os.path.join(img_folder, "Data/custom_train.json" if train else "Data/custom_val.json")
@@ -153,3 +157,24 @@ class Detr(pl.LightningModule):
 
     def val_dataloader(self):
         return val_dataloader
+
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4)
+
+outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
+
+checkpoint_callback = ModelCheckpoint(
+    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
+    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
+    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
+    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
+    mode='min',  # val_loss가 감소하는 경우에 저장
+)
+
+trainer = Trainer(
+    max_epochs=10,  # 학습할 최대 에폭 수
+    gradient_clip_val=0.1,
+    callbacks=[checkpoint_callback],  # ModelCheckpoint 콜백 추가
+)
+trainer.fit(model)
+
+checkpoint_path = "./Model/DETR/checkpoint.pth"
