@@ -152,7 +152,8 @@ class CustomModel(torch.nn.Module):
             # [x_min, y_min, x_max, y_max]
             "area": torch.tensor([(1529 - 1141) * (608 - 433)], dtype=torch.float32, device=device),
             # Optional, 박스의 면적 계산
-            "iscrowd": torch.tensor([0], dtype=torch.int64, device=device)  # Optional, 객체 인스턴스를 설명하는 상태
+            "iscrowd": torch.tensor([0], dtype=torch.int64, device=device),  # Optional, 객체 인스턴스를 설명하는 상태
+            "orig_size": torch.tensor([1920, 1080], dtype=torch.int64, device=device)
         }]
 
         # DETR output
