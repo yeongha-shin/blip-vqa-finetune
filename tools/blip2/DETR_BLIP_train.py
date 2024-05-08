@@ -95,7 +95,7 @@ def collate_fn(batch):
   processed_batch['pixel_mask'] = encoding['pixel_mask']
   processed_batch['labels'] = labels
 
-  for key in batch.keys():
+  for key in batch[0].keys():
       if key != "text":
           processed_batch[key] = torch.stack([example[key] for example in batch])
       else:
