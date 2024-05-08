@@ -1,5 +1,3 @@
-# 만약 CUDA가 가능하다면, GPU를 사용하고 그렇지 않다면 CPU를 사용합니다.
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 import torchvision
 import os
@@ -16,6 +14,8 @@ from coco_eval import CocoEvaluator
 from tqdm import tqdm  # tqdm.notebook에서 tqdm으로 변경
 import matplotlib.pyplot as plt
 
+# 만약 CUDA가 가능하다면, GPU를 사용하고 그렇지 않다면 CPU를 사용합니다.
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, processor, train=True):
