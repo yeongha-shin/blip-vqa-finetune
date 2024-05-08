@@ -95,15 +95,15 @@ def collate_fn(batch):
   processed_batch['pixel_mask'] = encoding['pixel_mask']
   processed_batch['labels'] = labels
 
-  for key in batch[0].keys():
-      if key != "text":
-          processed_batch[key] = torch.stack([example[key] for example in batch])
-      else:
-          text_inputs = blip_processor.tokenizer(
-              [example["text"] for example in batch], padding=True, return_tensors="pt"
-          )
-          processed_batch["input_ids"] = text_inputs["input_ids"]
-          processed_batch["attention_mask"] = text_inputs["attention_mask"]
+  # for key in batch[0].keys():
+  #     if key != "text":
+  #         processed_batch[key] = torch.stack([example[key] for example in batch])
+  #     else:
+  #         text_inputs = blip_processor.tokenizer(
+  #             [example["text"] for example in batch], padding=True, return_tensors="pt"
+  #         )
+  #         processed_batch["input_ids"] = text_inputs["input_ids"]
+  #         processed_batch["attention_mask"] = text_inputs["attention_mask"]
 
   return processed_batch
 
