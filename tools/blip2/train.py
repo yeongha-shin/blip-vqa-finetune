@@ -189,8 +189,6 @@ class CustomModel(torch.nn.Module):
 
         inputs = upsampled_feature
 
-        torch.no_grad()
-
         outputs = self.detr_model(**inputs, labels=labels)
 
         # Process DETR outputs
@@ -315,7 +313,8 @@ for epoch in range(50):
 
         blip_outputs, detr_outputs = model(image, input_ids=input_ids, pixel_values=pixel_values, labels=input_ids, output_hidden_states=True)
 
-        loss = blip_outputs.loss
+        # loss = blip_outputs.loss
+        loss = detr_outputs.loss
 
         print("Loss:", loss.item())
 
