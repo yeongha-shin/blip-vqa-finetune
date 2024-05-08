@@ -28,6 +28,7 @@ class CocoDetection(torchvision.datasets.CocoDetection):
         super(CocoDetection, self).__init__(img_folder, ann_file)
         self.blip_processor = blip_processor
         self.detr_processor = detr_processor
+        self.max_length = 128
 
     def __getitem__(self, idx):
         # read in PIL image and target in COCO format
