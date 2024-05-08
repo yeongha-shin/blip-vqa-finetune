@@ -59,4 +59,5 @@ for annotation in annotations:
   draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
   draw.text((x, y), id2label[class_idx], fill='white')
 
-draw.save("image_test.png")
+image.show()
+image.save("ImageDraw.png")
