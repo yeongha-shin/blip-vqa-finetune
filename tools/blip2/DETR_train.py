@@ -3,6 +3,10 @@ import os
 
 from transformers import DetrImageProcessor
 
+import numpy as np
+import os
+from PIL import Image, ImageDraw
+
 class CocoDetection(torchvision.datasets.CocoDetection):
     def __init__(self, img_folder, processor, train=True):
         ann_file = os.path.join(img_folder, "Data/custom_train.json" if train else "Data/custom_val.json")
@@ -33,3 +37,26 @@ print("Number of training examples:", len(train_dataset))
 print("Number of validation examples:", len(val_dataset))
 
 print("training examples:", train_dataset[0])
+
+# based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
+image_ids = train_dataset.coco.getImgIds()
+# let's pick a random image
+image_id = image_ids[np.random.randint(0, len(image_ids))]
+print('Image n°{}'.format(image_id))
+image = train_dataset.coco.loadImgs(image_id)[0]
+image = Image.open("Data/image.png")
+
+annotations = train_dataset.coco.imgToAnns[image_id]
+draw = ImageDraw.Draw(image, "RGBA")
+
+cats = train_dataset.coco.cats
+id2label = {k: v['name'] for k,v in cats.items()}
+
+for annotation in annotations:
+  box = annotation['bbox']
+  class_idx = annotation['category_id']
+  x,y,w,h = tuple(box)
+  draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
+  draw.text((x, y), id2label[class_idx], fill='white')
+
+draw.save("image_test.png")
