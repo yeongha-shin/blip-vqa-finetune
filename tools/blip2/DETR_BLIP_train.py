@@ -219,8 +219,8 @@ model = CustomModel(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"s
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
 
-trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
-trainer.fit(model)
+# trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
+# trainer.fit(model)
 
 #--------------------------------------------------------------------------------------------
 #                                      Evaluation Part
