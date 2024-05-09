@@ -116,83 +116,83 @@ batch = next(iter(train_dataloader))
 print(batch.keys())
 
 
-# class Detr(pl.LightningModule):
-#     def __init__(self, lr, lr_backbone, weight_decay, id2label):
-#         super().__init__()
-#         # replace COCO classification head with custom head
-#         # we specify the "no_timm" variant here to not rely on the timm library
-#         # for the convolutional backbone
-#         self.model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
-#                                                             revision="no_timm",
-#                                                             num_labels=len(id2label),
-#                                                             ignore_mismatched_sizes=True)
-#         # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
-#         self.lr = lr
-#         self.lr_backbone = lr_backbone
-#         self.weight_decay = weight_decay
-#         self.id2label = id2label  # Adding the id2label mapping to the class
-#
-#     def forward(self, pixel_values, pixel_mask):
-#         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-#
-#         return outputs
-#
-#     def common_step(self, batch, batch_idx):
-#         pixel_values = batch["pixel_values"]
-#         pixel_mask = batch["pixel_mask"]
-#         labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
-#
-#         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-#
-#         loss = outputs.loss
-#         loss_dict = outputs.loss_dict
-#
-#         return loss, loss_dict
-#
-#     def training_step(self, batch, batch_idx):
-#         loss, loss_dict = self.common_step(batch, batch_idx)
-#         # logs metrics for each training_step,
-#         # and the average across the epoch
-#         self.log("training_loss", loss)
-#         for k, v in loss_dict.items():
-#             self.log("train_" + k, v.item())
-#
-#         return loss
-#
-#     def validation_step(self, batch, batch_idx):
-#         loss, loss_dict = self.common_step(batch, batch_idx)
-#         self.log("validation_loss", loss)
-#         for k, v in loss_dict.items():
-#             self.log("validation_" + k, v.item())
-#
-#         return loss
-#
-#     def configure_optimizers(self):
-#         param_dicts = [
-#             {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
-#             {
-#                 "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
-#                 "lr": self.lr_backbone,
-#             },
-#         ]
-#         optimizer = torch.optim.AdamW(param_dicts, lr=self.lr,
-#                                       weight_decay=self.weight_decay)
-#
-#         return optimizer
-#
-#     def train_dataloader(self):
-#         return train_dataloader
-#
-#     def val_dataloader(self):
-#         return val_dataloader
+class Detr(pl.LightningModule):
+    def __init__(self, lr, lr_backbone, weight_decay, id2label):
+        super().__init__()
+        # replace COCO classification head with custom head
+        # we specify the "no_timm" variant here to not rely on the timm library
+        # for the convolutional backbone
+        self.model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+                                                            revision="no_timm",
+                                                            num_labels=len(id2label),
+                                                            ignore_mismatched_sizes=True)
+        # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
+        self.lr = lr
+        self.lr_backbone = lr_backbone
+        self.weight_decay = weight_decay
+        self.id2label = id2label  # Adding the id2label mapping to the class
 
-# model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
-#
-# outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
-#
-#
-# trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
-# trainer.fit(model)
+    def forward(self, pixel_values, pixel_mask):
+        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+        return outputs
+
+    def common_step(self, batch, batch_idx):
+        pixel_values = batch["pixel_values"]
+        pixel_mask = batch["pixel_mask"]
+        labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
+
+        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        loss = outputs.loss
+        loss_dict = outputs.loss_dict
+
+        return loss, loss_dict
+
+    def training_step(self, batch, batch_idx):
+        loss, loss_dict = self.common_step(batch, batch_idx)
+        # logs metrics for each training_step,
+        # and the average across the epoch
+        self.log("training_loss", loss)
+        for k, v in loss_dict.items():
+            self.log("train_" + k, v.item())
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss, loss_dict = self.common_step(batch, batch_idx)
+        self.log("validation_loss", loss)
+        for k, v in loss_dict.items():
+            self.log("validation_" + k, v.item())
+
+        return loss
+
+    def configure_optimizers(self):
+        param_dicts = [
+            {"params": [p for n, p in self.named_parameters() if "backbone" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in self.named_parameters() if "backbone" in n and p.requires_grad],
+                "lr": self.lr_backbone,
+            },
+        ]
+        optimizer = torch.optim.AdamW(param_dicts, lr=self.lr,
+                                      weight_decay=self.weight_decay)
+
+        return optimizer
+
+    def train_dataloader(self):
+        return train_dataloader
+
+    def val_dataloader(self):
+        return val_dataloader
+
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
+
+outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
+
+
+trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
+trainer.fit(model)
 
 # -------------------------------------------------------------------------------
 #                             without pytorch lightning
@@ -200,27 +200,27 @@ print(batch.keys())
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(device)
-detr_optimizer = torch.optim.AdamW(detr_model.parameters(), lr=5e-5)
-
-detr_model.train()
-
-for epoch in range(10):
-    print("Epoch:", epoch)
-    for idx, batch in enumerate(train_dataloader):
-
-        pixel_values = batch["pixel_values"].to(device)
-        pixel_mask = batch["pixel_mask"].to(device)
-        labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-
-        detr_outputs = detr_model(pixel_values=pixel_values, pixel_mask = pixel_mask, labels=labels)
-
-        detr_loss = detr_outputs.loss
-
-        detr_loss.backward()
-        detr_optimizer.step()
-
-        detr_optimizer.zero_grad()
+# detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(device)
+# detr_optimizer = torch.optim.AdamW(detr_model.parameters(), lr=5e-5)
+#
+# detr_model.train()
+#
+# for epoch in range(10):
+#     print("Epoch:", epoch)
+#     for idx, batch in enumerate(train_dataloader):
+#
+#         pixel_values = batch["pixel_values"].to(device)
+#         pixel_mask = batch["pixel_mask"].to(device)
+#         labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+#
+#         detr_outputs = detr_model(pixel_values=pixel_values, pixel_mask = pixel_mask, labels=labels)
+#
+#         detr_loss = detr_outputs.loss
+#
+#         detr_loss.backward()
+#         detr_optimizer.step()
+#
+#         detr_optimizer.zero_grad()
 
 
 def convert_to_xywh(boxes):
@@ -263,7 +263,7 @@ for idx, batch in enumerate(tqdm(val_dataloader)):
 
     # forward pass
     with torch.no_grad():
-      outputs = detr_model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
     # turn into a list of dictionaries (one item for each example in the batch)
     orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
@@ -286,7 +286,7 @@ print(pixel_values.shape)
 
 with torch.no_grad():
   # forward pass to get class logits and bounding boxes
-  outputs = detr_model(pixel_values=pixel_values, pixel_mask=None)
+  outputs = model(pixel_values=pixel_values, pixel_mask=None)
 print("Outputs:", outputs.keys())
 
 # colors for visualization
