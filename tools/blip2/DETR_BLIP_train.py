@@ -229,7 +229,7 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         coco_evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
 
         for batch in validation_step_outputs:
