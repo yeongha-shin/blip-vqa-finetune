@@ -209,8 +209,8 @@ for epoch in range(10):
     print("Epoch:", epoch)
     for idx, batch in enumerate(train_dataloader):
 
-        pixel_values = batch["pixel_values"]
-        pixel_mask = batch["pixel_mask"]
+        pixel_values = batch["pixel_values"].to(device)
+        pixel_mask = batch["pixel_mask"].to(device)
         labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
 
         detr_outputs = detr_model(pixel_values=pixel_values, pixel_mask = pixel_mask, labels=labels)
