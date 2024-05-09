@@ -168,6 +168,9 @@ class Detr(pl.LightningModule):
         num_classes = len(self.id2label)
         one_hot_labels = torch.eye(num_classes)[pred_labels]
 
+        # Convert predicted boxes to tensor
+        pred_boxes_tensor = torch.tensor(pred_boxes)
+
         # Compute loss using predicted boxes and one-hot encoded labels
         # 여기에서 손실을 계산하는 코드를 수정해야 합니다.
         # 예를 들어, 예측된 박스와 실제 박스 간의 IoU를 계산하여 사용할 수 있습니다.
@@ -176,7 +179,7 @@ class Detr(pl.LightningModule):
         # 실제로는 해당 문제에 맞는 손실 함수를 선택하셔야 합니다.
 
         # Compute IoU between predicted boxes and target boxes
-        iou = torchvision.ops.box_iou(pred_boxes, labels['boxes'])
+        iou = torchvision.ops.box_iou(pred_boxes_tensor, labels['boxes'])
 
         # Compute loss using IoU
         loss = 1 - iou.mean()  # 예측된 박스와 실제 박스 간의 평균 IoU를 손실로 사용합니다.
