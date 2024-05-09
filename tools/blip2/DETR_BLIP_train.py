@@ -338,7 +338,7 @@ for idx, batch in enumerate(tqdm(val_dataloader)):
 
     question = "What kinds of objects are there?"
 
-    encoding = model.processor(image, question, return_tensors="pt").to(device, torch.float16)
+    encoding = model.blip_processor(image, question, return_tensors="pt").to(device, torch.float16)
 
     generated_output = model.blip_model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'],
                                                  max_length=30)
