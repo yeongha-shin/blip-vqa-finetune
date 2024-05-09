@@ -175,8 +175,12 @@ class Detr(pl.LightningModule):
         self.weight_decay = weight_decay
         self.id2label = id2label  # Adding the id2label mapping to the class
 
+        self.outputs = []
+
     def forward(self, pixel_values, pixel_mask):
         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+        self.outputs = outputs
 
         return outputs
 
@@ -229,8 +233,10 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-    def on_validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         coco_evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+
+        outputs = self.outputs
 
         for batch in outputs:
             pixel_values = batch["pixel_values"].to(self.device)
