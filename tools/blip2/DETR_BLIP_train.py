@@ -135,55 +135,17 @@ class Detr(pl.LightningModule):
 
         return outputs
 
-    # def common_step(self, batch, batch_idx):
-    #     pixel_values = batch["pixel_values"]
-    #     pixel_mask = batch["pixel_mask"]
-    #     labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
-    #
-    #     outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-    #
-    #     loss = outputs.loss
-    #     loss_dict = outputs.loss_dict
-    #
-    #     return loss, loss_dict
-
     def common_step(self, batch, batch_idx):
         pixel_values = batch["pixel_values"]
         pixel_mask = batch["pixel_mask"]
         labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
 
-        # Get model predictions
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
-        # Post-process model predictions to get predicted boxes and labels
-        orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-        postprocessed_outputs = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes,
-                                                                             threshold=0)
-        # Extract predicted boxes, labels, and scores
-        pred_boxes = postprocessed_outputs[0]['boxes']
-        pred_labels = postprocessed_outputs[0]['labels']
+        loss = outputs.loss
+        loss_dict = outputs.loss_dict
 
-        # Convert labels to one-hot encoding
-        num_classes = len(self.id2label)
-        one_hot_labels = torch.eye(num_classes)[pred_labels]
-
-        # Convert predicted boxes to tensor
-        pred_boxes_tensor = torch.tensor(pred_boxes)
-
-        # Compute loss using predicted boxes and one-hot encoded labels
-        # 여기에서 손실을 계산하는 코드를 수정해야 합니다.
-        # 예를 들어, 예측된 박스와 실제 박스 간의 IoU를 계산하여 사용할 수 있습니다.
-        # 또는 다른 손실 함수를 사용할 수도 있습니다.
-        # 이 예제에서는 간단한 예시로 IoU를 이용한 손실을 계산합니다.
-        # 실제로는 해당 문제에 맞는 손실 함수를 선택하셔야 합니다.
-
-        # Compute IoU between predicted boxes and target boxes
-        iou = torchvision.ops.box_iou(pred_boxes_tensor, labels['boxes'])
-
-        # Compute loss using IoU
-        loss = 1 - iou.mean()  # 예측된 박스와 실제 박스 간의 평균 IoU를 손실로 사용합니다.
-
-        return loss
+        return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
         loss, loss_dict = self.common_step(batch, batch_idx)
@@ -222,6 +184,23 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
+
+outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
+
+checkpoint_callback = ModelCheckpoint(
+    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
+    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
+    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
+    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
+    mode='min',  # val_loss가 감소하는 경우에 저장
+)
+
+trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
+trainer.fit(model)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model.to(device)
 def convert_to_xywh(boxes):
     xmin, ymin, xmax, ymax = boxes.unbind(1)
     return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
@@ -250,6 +229,45 @@ def prepare_for_coco_detection(predictions):
         )
     return coco_results
 
+# initialize evaluator with ground truth (gt)
+evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+
+print("Running evaluation...")
+for idx, batch in enumerate(tqdm(val_dataloader)):
+    # get the inputs
+    pixel_values = batch["pixel_values"].to(device)
+    pixel_mask = batch["pixel_mask"].to(device)
+    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+
+    # forward pass
+    with torch.no_grad():
+      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+    # turn into a list of dictionaries (one item for each example in the batch)
+    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+    results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+
+    # provide to metric
+    # metric expects a list of dictionaries, each item
+    # containing image_id, category_id, bbox and score keys
+    predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+    predictions = prepare_for_coco_detection(predictions)
+    evaluator.update(predictions)
+
+evaluator.synchronize_between_processes()
+evaluator.accumulate()
+evaluator.summarize()
+
+pixel_values, target = val_dataset[0]
+pixel_values = pixel_values.unsqueeze(0).to(device)
+print(pixel_values.shape)
+
+with torch.no_grad():
+  # forward pass to get class logits and bounding boxes
+  outputs = model(pixel_values=pixel_values, pixel_mask=None)
+print("Outputs:", outputs.keys())
+
+# colors for visualization
 COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
           [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
 
@@ -266,206 +284,18 @@ def plot_results(pil_img, scores, labels, boxes, id2label):
     plt.savefig("Detr_finetune.png")
     plt.show()
 
-model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
-outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
+# load image based on ID
+image_id = target['image_id'].item()
+image = val_dataset.coco.loadImgs(image_id)[0]
+image = Image.open("Data/image.png")
 
-
-# trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
-# trainer.fit(model)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
-
-# initialize evaluator with ground truth (gt)
-evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-criterion = torch.nn.CrossEntropyLoss()
-
-
-max_epochs = 10
-for epoch in range(max_epochs):
-    model.train()
-    train_losses = []
-    for batch in train_dataloader:
-        pixel_values = batch["pixel_values"].to(device)
-        pixel_mask = batch["pixel_mask"].to(device)
-        labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-
-        optimizer.zero_grad()
-        outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-        # Compute loss
-        print("output", outputs)
-
-        loss = criterion(outputs, labels)
-        train_losses.append(loss.item())
-
-        # Backpropagation
-        loss.backward()
-        optimizer.step()
-
-    # Print average training loss for the epoch
-    avg_train_loss = sum(train_losses) / len(train_losses)
-    print(f"Epoch [{epoch + 1}/{max_epochs}], Avg. Train Loss: {avg_train_loss}")
-
-    # Validation
-    model.eval()
-    val_losses = []
-    for batch in val_dataloader:
-        with torch.no_grad():
-            pixel_values = batch["pixel_values"].to(device)
-            pixel_mask = batch["pixel_mask"].to(device)
-            labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-
-            outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-            loss = criterion(outputs, labels)
-            val_losses.append(loss.item())
-
-    # Print average validation loss for the epoch
-    avg_val_loss = sum(val_losses) / len(val_losses)
-    print(f"Avg. Validation Loss: {avg_val_loss}")
-
-    # Evaluation
-    if (epoch + 1) % 10 == 0:
-        print("Running evaluation...")
-        for idx, batch in enumerate(tqdm(val_dataloader)):
-            pixel_values = batch["pixel_values"].to(device)
-            pixel_mask = batch["pixel_mask"].to(device)
-            labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-
-            with torch.no_grad():
-                outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-            orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-            results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-
-            predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-            predictions = prepare_for_coco_detection(predictions)
-            evaluator.update(predictions)
-
-        evaluator.synchronize_between_processes()
-        evaluator.accumulate()
-        evaluator.summarize()
-
-        # Plotting
-        pixel_values, target = val_dataset[0]
-        pixel_values = pixel_values.unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values=pixel_values, pixel_mask=None)
-
-        image_id = target['image_id'].item()
-        image = val_dataset.coco.loadImgs(image_id)[0]
-        image = Image.open("Data/image.png")
-
-        width, height = image.size
-        postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
-                                                                             target_sizes=[(height, width)],
-                                                                             threshold=0.0)
-        results = postprocessed_outputs[0]
-        plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0: "ship"})
-
-
-
-# max_epochs = 10
-# for epoch in range(max_epochs):
-#     model.train()
-#     train_losses = []
-#     for batch in train_dataloader:
-#         pixel_values = batch["pixel_values"].to(device)
-#         pixel_mask = batch["pixel_mask"].to(device)
-#         labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-#
-#         optimizer.zero_grad()
-#         outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-#
-#         # Compute loss
-#         loss = criterion(outputs, labels)
-#         train_losses.append(loss.item())
-#
-#         # Backpropagation
-#         loss.backward()
-#         optimizer.step()
-#
-#     # Print average training loss for the epoch
-#     avg_train_loss = sum(train_losses) / len(train_losses)
-#     print(f"Epoch [{epoch + 1}/{max_epochs}], Avg. Train Loss: {avg_train_loss}")
-#
-#     # Validation
-#     model.eval()
-#     val_losses = []
-#     for batch in val_dataloader:
-#         with torch.no_grad():
-#             pixel_values = batch["pixel_values"].to(device)
-#             pixel_mask = batch["pixel_mask"].to(device)
-#             labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
-#
-#             outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-#             loss = criterion(outputs, labels)
-#             val_losses.append(loss.item())
-#
-#     # Print average validation loss for the epoch
-#     avg_val_loss = sum(val_losses) / len(val_losses)
-#     print(f"Avg. Validation Loss: {avg_val_loss}")
-#
-# #
-# # initialize evaluator with ground truth (gt)
-# evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-#
-# print("Running evaluation...")
-# for idx, batch in enumerate(tqdm(val_dataloader)):
-#     # get the inputs
-#     pixel_values = batch["pixel_values"].to(device)
-#     pixel_mask = batch["pixel_mask"].to(device)
-#     labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
-#
-#     # forward pass
-#     with torch.no_grad():
-#       outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-#
-#     # turn into a list of dictionaries (one item for each example in the batch)
-#     orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-#     results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-#
-#     # provide to metric
-#     # metric expects a list of dictionaries, each item
-#     # containing image_id, category_id, bbox and score keys
-#     predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-#     predictions = prepare_for_coco_detection(predictions)
-#     evaluator.update(predictions)
-#
-# evaluator.synchronize_between_processes()
-# evaluator.accumulate()
-# evaluator.summarize()
-#
-# pixel_values, target = val_dataset[0]
-# pixel_values = pixel_values.unsqueeze(0).to(device)
-# print(pixel_values.shape)
-#
-# with torch.no_grad():
-#   # forward pass to get class logits and bounding boxes
-#   outputs = model(pixel_values=pixel_values, pixel_mask=None)
-# print("Outputs:", outputs.keys())
-#
-# # colors for visualization
-#
-#
-#
-# # load image based on ID
-# image_id = target['image_id'].item()
-# image = val_dataset.coco.loadImgs(image_id)[0]
-# image = Image.open("Data/image.png")
-#
-# # postprocess model outputs
-# width, height = image.size
-# postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
-#                                                                 target_sizes=[(height, width)],
-#                                                                 threshold=0.0)
-# results = postprocessed_outputs[0]
-# plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
-#
-
+# postprocess model outputs
+width, height = image.size
+postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
+                                                                target_sizes=[(height, width)],
+                                                                threshold=0.0)
+results = postprocessed_outputs[0]
+plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
 print("end of algorithm")
