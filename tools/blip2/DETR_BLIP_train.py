@@ -159,7 +159,6 @@ class Detr(pl.LightningModule):
         orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
         postprocessed_outputs = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes,
                                                                              threshold=0)
-
         # Extract predicted boxes, labels, and scores
         pred_boxes = postprocessed_outputs[0]['boxes']
         pred_labels = postprocessed_outputs[0]['labels']
@@ -298,7 +297,9 @@ for epoch in range(max_epochs):
         outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
         # Compute loss
-        loss = criterion(outputs.loss, labels)
+        print("output", outputs)
+
+        loss = criterion(outputs, labels)
         train_losses.append(loss.item())
 
         # Backpropagation
