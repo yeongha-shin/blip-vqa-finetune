@@ -186,10 +186,13 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
+model.to(device)
 
 trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
 trainer.fit(model)
@@ -198,7 +201,7 @@ trainer.fit(model)
 #                             without pytorch lightning
 # -------------------------------------------------------------------------------
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 # detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(device)
 # detr_optimizer = torch.optim.AdamW(detr_model.parameters(), lr=5e-5)
