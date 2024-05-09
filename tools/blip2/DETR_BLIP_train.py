@@ -229,10 +229,10 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-    def on_validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, outputs, batch_indices):
         coco_evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
 
-        for batch in validation_step_outputs:
+        for batch in outputs:
             pixel_values = batch["pixel_values"].to(self.device)
             pixel_mask = batch["pixel_mask"].to(self.device)
             labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
