@@ -200,10 +200,8 @@ print(batch.keys())
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(device)
 detr_optimizer = torch.optim.AdamW(detr_model.parameters(), lr=5e-5)
-
-detr_model.to(device)
 
 detr_model.train()
 
