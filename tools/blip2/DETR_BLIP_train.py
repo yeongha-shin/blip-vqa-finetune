@@ -54,9 +54,9 @@ class VQADataset(torchvision.datasets.CocoDetection):
         # target = encoding["labels"][0] # remove batch dimension
         target = detr_encoding["labels"][0]  # remove batch dimension
 
-        blip_encoding["text"] = "There are 6 ships and 1 red buoy at [LOC]."
+        text = "There are 6 ships and 1 red buoy at [LOC]."
 
-        return pixel_values, target
+        return pixel_values, target, text
 
 
 
@@ -80,8 +80,9 @@ def collate_fn(batch):
   print(processed_batch)
 
   text_inputs = blip_processor.tokenizer(
-      [example["text"] for example in batch], padding=True, return_tensors="pt"
+      [item[2] for item in batch], padding=True, return_tensors="pt"
   )
+
   processed_batch["input_ids"] = text_inputs["input_ids"]
   processed_batch["attention_mask"] = text_inputs["attention_mask"]
 
