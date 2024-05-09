@@ -340,6 +340,6 @@ for idx, batch in enumerate(tqdm(val_dataloader)):
 
     generated_output = model.blip_model.generate(input_ids='input_ids', pixel_values='pixel_values',
                                                  max_length=30)
-    print("LLM output", model.processor.batch_decode(generated_output, skip_special_tokens=True))
+    print("LLM output", model.blip_processor.batch_decode(generated_output, skip_special_tokens=True))
 
 print("end of algorithm")
