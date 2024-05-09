@@ -77,16 +77,12 @@ def collate_fn(batch):
   processed_batch['pixel_mask'] = encoding['pixel_mask']
   processed_batch['labels'] = labels
 
-  print(processed_batch)
-
   text_inputs = blip_processor.tokenizer(
       [item[2] for item in batch], padding=True, return_tensors="pt"
   )
 
   processed_batch["input_ids"] = text_inputs["input_ids"]
   processed_batch["attention_mask"] = text_inputs["attention_mask"]
-
-  print(processed_batch)
 
   return processed_batch
 
