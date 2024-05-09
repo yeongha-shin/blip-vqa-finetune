@@ -296,7 +296,7 @@ postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
                                                                 target_sizes=[(height, width)],
                                                                 threshold=0.0)
 results = postprocessed_outputs[0]
-print(results[0])
+print(results)
 
 plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
