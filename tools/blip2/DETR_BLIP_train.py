@@ -333,13 +333,16 @@ plot_results(image, results['scores'], results['labels'], results['boxes'], id2l
 
 for idx, batch in enumerate(tqdm(val_dataloader)):
     # get the inputs
-    input_ids = batch.pop("input_ids").to(device)
-    pixel_values = batch.pop("pixel_values").to(device, torch.float16)
+    # input_ids = batch.pop("input_ids").to(device)
+    # pixel_values = batch.pop("pixel_values").to(device, torch.float16)
 
     question = "What kinds of objects are there?"
 
-    generated_output = model.blip_model.generate(input_ids=input_ids, pixel_values=pixel_values,
+    encoding = model.processor(image, question, return_tensors="pt").to(device, torch.float16)
+
+    generated_output = model.blip_model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'],
                                                  max_length=30)
+
     print("LLM output", model.blip_processor.batch_decode(generated_output, skip_special_tokens=True))
 
 print("end of algorithm")
