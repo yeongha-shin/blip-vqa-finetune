@@ -331,6 +331,21 @@ plot_results(image, results['scores'], results['labels'], results['boxes'], id2l
 #                                      Evaluation Part
 #--------------------------------------------------------------------------------------------
 
+config = LoraConfig(
+    r=16,
+    lora_alpha=32,
+    lora_dropout=0.05,
+    bias="none",
+)
+
+blip_model = Blip2ForConditionalGeneration.from_pretrained(
+    "Salesforce/blip2-opt-2.7b", quantization_config=BitsAndBytesConfig(load_in_8bit=True)
+)
+
+blip_model = get_peft_model(blip_model, config)
+blip_model.print_trainable_parameters()
+blip_model.to(device)
+
 for idx, batch in enumerate(tqdm(val_dataloader)):
     # get the inputs
     # input_ids = batch.pop("input_ids").to(device)
@@ -338,11 +353,18 @@ for idx, batch in enumerate(tqdm(val_dataloader)):
 
     question = "What kinds of objects are there?"
 
-    encoding = model.blip_processor(image, question, return_tensors="pt").to(device, torch.float16)
+    # encoding = model.blip_processor(image, question, return_tensors="pt").to(device, torch.float16)
 
-    generated_output = model.blip_model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'],
+    # generated_output = model.blip_model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'],
+    #                                              max_length=30)
+
+    # print("LLM output", model.blip_processor.batch_decode(generated_output, skip_special_tokens=True))
+
+    encoding = blip_processor(image, question, return_tensors="pt").to(device, torch.float16)
+
+    generated_output = blip_model.generate(input_ids=encoding['input_ids'], pixel_values=encoding['pixel_values'],
                                                  max_length=30)
 
-    print("LLM output", model.blip_processor.batch_decode(generated_output, skip_special_tokens=True))
+    print("LLM output", blip_processor.batch_decode(generated_output, skip_special_tokens=True))
 
 print("end of algorithm")
