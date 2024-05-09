@@ -55,41 +55,6 @@ class VQADataset(torchvision.datasets.CocoDetection):
 
         return pixel_values, target
 
-blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
-detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
-
-train_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=True)
-val_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=False)
-
-print("Number of training examples:", len(train_dataset))
-print("Number of validation examples:", len(val_dataset))
-
-print("training examples:", train_dataset[0])
-
-# based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
-image_ids = train_dataset.coco.getImgIds()
-# let's pick a random image
-image_id = image_ids[np.random.randint(0, len(image_ids))]
-print('Image n°{}'.format(image_id))
-image = train_dataset.coco.loadImgs(image_id)[0]
-image = Image.open("Data/image.png")
-
-annotations = train_dataset.coco.imgToAnns[image_id]
-draw = ImageDraw.Draw(image, "RGBA")
-
-cats = train_dataset.coco.cats
-id2label = {k: v['name'] for k,v in cats.items()}
-
-for annotation in annotations:
-  box = annotation['bbox']
-  class_idx = annotation['category_id']
-  x,y,w,h = tuple(box)
-  draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
-  draw.text((x, y), id2label[class_idx], fill='white')
-
-image.show()
-image.save("ImageDraw.png")
-
 def collate_fn(batch):
   pixel_values = [item[0] for item in batch]
   encoding = detr_processor.pad(pixel_values, return_tensors="pt")
@@ -111,11 +76,20 @@ def collate_fn(batch):
 
   return processed_batch
 
+#--------------------------------------------------------------------------------------------
+#                                           Model
+#--------------------------------------------------------------------------------------------
+
+
+blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
+
+train_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=True)
+val_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=False)
+
 train_dataloader = DataLoader(train_dataset, collate_fn=collate_fn, batch_size=4, shuffle=True)
 val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=2)
 batch = next(iter(train_dataloader))
-
-print(batch.keys())
 
 
 class Detr(pl.LightningModule):
@@ -188,20 +162,51 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
+
+#--------------------------------------------------------------------------------------------
+#                                      Annotation Check
+#--------------------------------------------------------------------------------------------
+
+# based on https://github.com/woctezuma/finetune-detr/blob/master/finetune_detr.ipynb
+image_ids = train_dataset.coco.getImgIds()
+# let's pick a random image
+image_id = image_ids[np.random.randint(0, len(image_ids))]
+print('Image n°{}'.format(image_id))
+image = train_dataset.coco.loadImgs(image_id)[0]
+image = Image.open("Data/image.png")
+
+annotations = train_dataset.coco.imgToAnns[image_id]
+draw = ImageDraw.Draw(image, "RGBA")
+
+cats = train_dataset.coco.cats
+id2label = {k: v['name'] for k,v in cats.items()}
+
+for annotation in annotations:
+  box = annotation['bbox']
+  class_idx = annotation['category_id']
+  x,y,w,h = tuple(box)
+  draw.rectangle((x,y,x+w,y+h), outline='red', width=1)
+  draw.text((x, y), id2label[class_idx], fill='white')
+
+image.show()
+image.save("ImageDraw.png")
+
+#--------------------------------------------------------------------------------------------
+#                                      Train Part
+#--------------------------------------------------------------------------------------------
+
 model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
-checkpoint_callback = ModelCheckpoint(
-    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
-    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
-    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
-    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
-    mode='min',  # val_loss가 감소하는 경우에 저장
-)
 
 trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
 trainer.fit(model)
+
+#--------------------------------------------------------------------------------------------
+#                                      Evaluation Part
+#--------------------------------------------------------------------------------------------
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
@@ -232,6 +237,19 @@ def prepare_for_coco_detection(predictions):
             ]
         )
     return coco_results
+
+def plot_results(pil_img, scores, labels, boxes, id2label):
+    plt.figure(figsize=(16, 10))
+    plt.imshow(pil_img)
+    ax = plt.gca()
+    colors = COLORS * 100
+    for score, label, (xmin, ymin, xmax, ymax), c in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
+        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=c, linewidth=3))
+        text = f'{id2label[label]}: {score:0.2f}'
+        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
+    plt.axis('off')
+    plt.savefig("Detr_finetune.png")
+    plt.show()
 
 # initialize evaluator with ground truth (gt)
 evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
@@ -275,19 +293,6 @@ print("Outputs:", outputs.keys())
 COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
           [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
 
-def plot_results(pil_img, scores, labels, boxes, id2label):
-    plt.figure(figsize=(16, 10))
-    plt.imshow(pil_img)
-    ax = plt.gca()
-    colors = COLORS * 100
-    for score, label, (xmin, ymin, xmax, ymax), c in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=c, linewidth=3))
-        text = f'{id2label[label]}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
-    plt.axis('off')
-    plt.savefig("Detr_finetune.png")
-    plt.show()
-
 
 # load image based on ID
 image_id = target['image_id'].item()
@@ -300,7 +305,7 @@ postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
                                                                 target_sizes=[(height, width)],
                                                                 threshold=0.0)
 results = postprocessed_outputs[0]
-print(results)
+
 
 plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
