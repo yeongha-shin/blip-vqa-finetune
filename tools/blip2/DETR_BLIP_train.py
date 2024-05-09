@@ -184,60 +184,17 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-    def validation_epoch_end(self, validation_step_outputs):
-        coco_evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-
-        for batch in validation_step_outputs:
-            pixel_values = batch["pixel_values"].to(self.device)
-            pixel_mask = batch["pixel_mask"].to(self.device)
-            labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
-
-            # forward pass
-            with torch.no_grad():
-                outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-            # post-process outputs
-            orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-            results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-
-            # prepare predictions for CocoEvaluator
-            predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-            predictions = prepare_for_coco_detection(predictions)
-
-            # update CocoEvaluator
-            coco_evaluator.update(predictions)
-
-        # synchronize and accumulate results
-        coco_evaluator.synchronize_between_processes()
-        coco_evaluator.accumulate()
-        coco_evaluator.summarize()
-
-        # print results
-        metrics = coco_evaluator.coco_eval["bbox"].stats.tolist()
-        print(f"Validation results - AP: {metrics[0]:.4f}, AP50: {metrics[1]:.4f}, AP75: {metrics[2]:.4f}")
-
-        # visualize results for a random image from validation dataset
-        # get a random image from validation dataset
-        idx = np.random.randint(0, len(val_dataset))
-        pixel_values, target = val_dataset[idx]
-        pixel_values = pixel_values.unsqueeze(0).to(self.device)
-
-        with torch.no_grad():
-            # forward pass to get class logits and bounding boxes
-            outputs = self.model(pixel_values=pixel_values, pixel_mask=None)
-
-        # postprocess model outputs
-        width, height = image.size
-        postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
-                                                                             target_sizes=[(height, width)],
-                                                                             threshold=0.0)
-        results = postprocessed_outputs[0]
-        plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0: "ship"})
-
-
 model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
+
+checkpoint_callback = ModelCheckpoint(
+    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
+    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
+    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
+    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
+    mode='min',  # val_loss가 감소하는 경우에 저장
+)
 
 trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
 trainer.fit(model)
