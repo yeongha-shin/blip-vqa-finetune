@@ -135,17 +135,43 @@ class Detr(pl.LightningModule):
 
         return outputs
 
+    # def common_step(self, batch, batch_idx):
+    #     pixel_values = batch["pixel_values"]
+    #     pixel_mask = batch["pixel_mask"]
+    #     labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
+    #
+    #     outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+    #
+    #     loss = outputs.loss
+    #     loss_dict = outputs.loss_dict
+    #
+    #     return loss, loss_dict
+
     def common_step(self, batch, batch_idx):
         pixel_values = batch["pixel_values"]
         pixel_mask = batch["pixel_mask"]
         labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
 
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        # Get model predictions
+        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
-        loss = outputs.loss
-        loss_dict = outputs.loss_dict
+        # Post-process model predictions to get predicted boxes and labels
+        orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+        postprocessed_outputs = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes,
+                                                                             threshold=0)
 
-        return loss, loss_dict
+        # Extract predicted boxes, labels, and scores
+        pred_boxes = postprocessed_outputs[0]['boxes']
+        pred_labels = postprocessed_outputs[0]['labels']
+
+        # Convert labels to one-hot encoding
+        num_classes = len(self.id2label)
+        one_hot_labels = torch.eye(num_classes)[pred_labels]
+
+        # Compute loss using predicted boxes and one-hot encoded labels
+        loss = criterion(pred_boxes, one_hot_labels)
+
+        return loss
 
     def training_step(self, batch, batch_idx):
         loss, loss_dict = self.common_step(batch, batch_idx)
