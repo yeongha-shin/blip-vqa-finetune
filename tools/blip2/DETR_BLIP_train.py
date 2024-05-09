@@ -113,51 +113,6 @@ batch = next(iter(train_dataloader))
 
 print(batch.keys())
 
-# colors for visualization
-COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
-          [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
-
-def plot_results(pil_img, scores, labels, boxes, id2label):
-    plt.figure(figsize=(16, 10))
-    plt.imshow(pil_img)
-    ax = plt.gca()
-    colors = COLORS * 100
-    for score, label, (xmin, ymin, xmax, ymax), c in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
-        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=c, linewidth=3))
-        text = f'{id2label[label]}: {score:0.2f}'
-        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
-    plt.axis('off')
-    plt.savefig("Detr_finetune.png")
-    plt.show()
-
-def convert_to_xywh(boxes):
-    xmin, ymin, xmax, ymax = boxes.unbind(1)
-    return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
-
-def prepare_for_coco_detection(predictions):
-    coco_results = []
-    for original_id, prediction in predictions.items():
-        if len(prediction) == 0:
-            continue
-
-        boxes = prediction["boxes"]
-        boxes = convert_to_xywh(boxes).tolist()
-        scores = prediction["scores"].tolist()
-        labels = prediction["labels"].tolist()
-
-        coco_results.extend(
-            [
-                {
-                    "image_id": original_id,
-                    "category_id": labels[k],
-                    "bbox": box,
-                    "score": scores[k],
-                }
-                for k, box in enumerate(boxes)
-            ]
-        )
-    return coco_results
-
 
 class Detr(pl.LightningModule):
     def __init__(self, lr, lr_backbone, weight_decay, id2label):
@@ -175,12 +130,8 @@ class Detr(pl.LightningModule):
         self.weight_decay = weight_decay
         self.id2label = id2label  # Adding the id2label mapping to the class
 
-        self.outputs = []
-
     def forward(self, pixel_values, pixel_mask):
         outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-        self.outputs = outputs
 
         return outputs
 
@@ -233,12 +184,10 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-    def on_validation_epoch_end(self):
+    def validation_epoch_end(self, validation_step_outputs):
         coco_evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
 
-        outputs = self.outputs
-
-        for batch in outputs:
+        for batch in validation_step_outputs:
             pixel_values = batch["pixel_values"].to(self.device)
             pixel_mask = batch["pixel_mask"].to(self.device)
             labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
@@ -290,64 +239,106 @@ model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
-
 trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
 trainer.fit(model)
 
-# device = "cuda" if torch.cuda.is_available() else "cpu"
-# model.to(device)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model.to(device)
+def convert_to_xywh(boxes):
+    xmin, ymin, xmax, ymax = boxes.unbind(1)
+    return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
+
+def prepare_for_coco_detection(predictions):
+    coco_results = []
+    for original_id, prediction in predictions.items():
+        if len(prediction) == 0:
+            continue
+
+        boxes = prediction["boxes"]
+        boxes = convert_to_xywh(boxes).tolist()
+        scores = prediction["scores"].tolist()
+        labels = prediction["labels"].tolist()
+
+        coco_results.extend(
+            [
+                {
+                    "image_id": original_id,
+                    "category_id": labels[k],
+                    "bbox": box,
+                    "score": scores[k],
+                }
+                for k, box in enumerate(boxes)
+            ]
+        )
+    return coco_results
 
 # initialize evaluator with ground truth (gt)
-# evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-#
-# print("Running evaluation...")
-# for idx, batch in enumerate(tqdm(val_dataloader)):
-#     # get the inputs
-#     pixel_values = batch["pixel_values"].to(device)
-#     pixel_mask = batch["pixel_mask"].to(device)
-#     labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
-#
-#     # forward pass
-#     with torch.no_grad():
-#       outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-#
-#     # turn into a list of dictionaries (one item for each example in the batch)
-#     orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-#     results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-#
-#     # provide to metric
-#     # metric expects a list of dictionaries, each item
-#     # containing image_id, category_id, bbox and score keys
-#     predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-#     predictions = prepare_for_coco_detection(predictions)
-#     evaluator.update(predictions)
-#
-# evaluator.synchronize_between_processes()
-# evaluator.accumulate()
-# evaluator.summarize()
-#
-# pixel_values, target = val_dataset[0]
-# pixel_values = pixel_values.unsqueeze(0).to(device)
-# print(pixel_values.shape)
-#
-# with torch.no_grad():
-#   # forward pass to get class logits and bounding boxes
-#   outputs = model(pixel_values=pixel_values, pixel_mask=None)
-# print("Outputs:", outputs.keys())
+evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
 
+print("Running evaluation...")
+for idx, batch in enumerate(tqdm(val_dataloader)):
+    # get the inputs
+    pixel_values = batch["pixel_values"].to(device)
+    pixel_mask = batch["pixel_mask"].to(device)
+    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+
+    # forward pass
+    with torch.no_grad():
+      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+    # turn into a list of dictionaries (one item for each example in the batch)
+    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+    results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+
+    # provide to metric
+    # metric expects a list of dictionaries, each item
+    # containing image_id, category_id, bbox and score keys
+    predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+    predictions = prepare_for_coco_detection(predictions)
+    evaluator.update(predictions)
+
+evaluator.synchronize_between_processes()
+evaluator.accumulate()
+evaluator.summarize()
+
+pixel_values, target = val_dataset[0]
+pixel_values = pixel_values.unsqueeze(0).to(device)
+print(pixel_values.shape)
+
+with torch.no_grad():
+  # forward pass to get class logits and bounding boxes
+  outputs = model(pixel_values=pixel_values, pixel_mask=None)
+print("Outputs:", outputs.keys())
+
+# colors for visualization
+COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
+          [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
+
+def plot_results(pil_img, scores, labels, boxes, id2label):
+    plt.figure(figsize=(16, 10))
+    plt.imshow(pil_img)
+    ax = plt.gca()
+    colors = COLORS * 100
+    for score, label, (xmin, ymin, xmax, ymax), c in zip(scores.tolist(), labels.tolist(), boxes.tolist(), colors):
+        ax.add_patch(plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color=c, linewidth=3))
+        text = f'{id2label[label]}: {score:0.2f}'
+        ax.text(xmin, ymin, text, fontsize=15, bbox=dict(facecolor='yellow', alpha=0.5))
+    plt.axis('off')
+    plt.savefig("Detr_finetune.png")
+    plt.show()
 
 
 # load image based on ID
-# image_id = target['image_id'].item()
-# image = val_dataset.coco.loadImgs(image_id)[0]
-# image = Image.open("Data/image.png")
-#
-# # postprocess model outputs
-# width, height = image.size
-# postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
-#                                                                 target_sizes=[(height, width)],
-#                                                                 threshold=0.0)
-# results = postprocessed_outputs[0]
-# plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
+image_id = target['image_id'].item()
+image = val_dataset.coco.loadImgs(image_id)[0]
+image = Image.open("Data/image.png")
+
+# postprocess model outputs
+width, height = image.size
+postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
+                                                                target_sizes=[(height, width)],
+                                                                threshold=0.0)
+results = postprocessed_outputs[0]
+plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
 
 print("end of algorithm")
