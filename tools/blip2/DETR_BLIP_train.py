@@ -106,20 +106,20 @@ class CustomModel(pl.LightningModule):
                                                             num_labels=len(id2label),
                                                             ignore_mismatched_sizes=True)
 
-        self.blip_model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b",
-                                                                        quantization_config=BitsAndBytesConfig(
-                                                                            load_in_8bit=True))  # Correct initialization
+        # self.blip_model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b",
+        #                                                                 quantization_config=BitsAndBytesConfig(
+        #                                                                     load_in_8bit=True))  # Correct initialization
         self.blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        self.blip_processor.tokenizer.add_tokens("[LOC]")
-
-        self.lora_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            lora_dropout=0.05,
-            bias="none",
-        )
-        self.blip_model = get_peft_model(self.blip_model, self.lora_config)
-        self.blip_model.print_trainable_parameters()
+        # self.blip_processor.tokenizer.add_tokens("[LOC]")
+        #
+        # self.lora_config = LoraConfig(
+        #     r=16,
+        #     lora_alpha=32,
+        #     lora_dropout=0.05,
+        #     bias="none",
+        # )
+        # self.blip_model = get_peft_model(self.blip_model, self.lora_config)
+        # self.blip_model.print_trainable_parameters()
 
         # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
         self.lr = lr
