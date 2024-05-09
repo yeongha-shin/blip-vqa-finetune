@@ -184,23 +184,6 @@ class Detr(pl.LightningModule):
     def val_dataloader(self):
         return val_dataloader
 
-model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
-
-outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
-
-checkpoint_callback = ModelCheckpoint(
-    monitor='val_loss',  # 모델 성능을 기준으로 체크포인트 저장
-    dirpath='./Model/DETR/',  # 체크포인트 저장 디렉토리
-    filename='detr-{epoch:02d}-{val_loss:.2f}',  # 체크포인트 파일명 포맷
-    save_top_k=3,  # 최고 성능의 체크포인트를 최대 3개까지 저장
-    mode='min',  # val_loss가 감소하는 경우에 저장
-)
-
-trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
-trainer.fit(model)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model.to(device)
 def convert_to_xywh(boxes):
     xmin, ymin, xmax, ymax = boxes.unbind(1)
     return torch.stack((xmin, ymin, xmax - xmin, ymax - ymin), dim=1)
@@ -229,45 +212,6 @@ def prepare_for_coco_detection(predictions):
         )
     return coco_results
 
-# initialize evaluator with ground truth (gt)
-evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
-
-print("Running evaluation...")
-for idx, batch in enumerate(tqdm(val_dataloader)):
-    # get the inputs
-    pixel_values = batch["pixel_values"].to(device)
-    pixel_mask = batch["pixel_mask"].to(device)
-    labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
-
-    # forward pass
-    with torch.no_grad():
-      outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-
-    # turn into a list of dictionaries (one item for each example in the batch)
-    orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-    results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
-
-    # provide to metric
-    # metric expects a list of dictionaries, each item
-    # containing image_id, category_id, bbox and score keys
-    predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
-    predictions = prepare_for_coco_detection(predictions)
-    evaluator.update(predictions)
-
-evaluator.synchronize_between_processes()
-evaluator.accumulate()
-evaluator.summarize()
-
-pixel_values, target = val_dataset[0]
-pixel_values = pixel_values.unsqueeze(0).to(device)
-print(pixel_values.shape)
-
-with torch.no_grad():
-  # forward pass to get class logits and bounding boxes
-  outputs = model(pixel_values=pixel_values, pixel_mask=None)
-print("Outputs:", outputs.keys())
-
-# colors for visualization
 COLORS = [[0.000, 0.447, 0.741], [0.850, 0.325, 0.098], [0.929, 0.694, 0.125],
           [0.494, 0.184, 0.556], [0.466, 0.674, 0.188], [0.301, 0.745, 0.933]]
 
@@ -284,18 +228,204 @@ def plot_results(pil_img, scores, labels, boxes, id2label):
     plt.savefig("Detr_finetune.png")
     plt.show()
 
+model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
-# load image based on ID
-image_id = target['image_id'].item()
-image = val_dataset.coco.loadImgs(image_id)[0]
-image = Image.open("Data/image.png")
+outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
-# postprocess model outputs
-width, height = image.size
-postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
-                                                                target_sizes=[(height, width)],
-                                                                threshold=0.0)
-results = postprocessed_outputs[0]
-plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
+
+# trainer = Trainer(max_steps=10, gradient_clip_val=0.1)
+# trainer.fit(model)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model.to(device)
+
+# initialize evaluator with ground truth (gt)
+evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+criterion = torch.nn.CrossEntropyLoss()
+
+
+max_epochs = 10
+for epoch in range(max_epochs):
+    model.train()
+    train_losses = []
+    for batch in train_dataloader:
+        pixel_values = batch["pixel_values"].to(device)
+        pixel_mask = batch["pixel_mask"].to(device)
+        labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+
+        optimizer.zero_grad()
+        outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+        # Compute loss
+        loss = criterion(outputs, labels)
+        train_losses.append(loss.item())
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+
+    # Print average training loss for the epoch
+    avg_train_loss = sum(train_losses) / len(train_losses)
+    print(f"Epoch [{epoch + 1}/{max_epochs}], Avg. Train Loss: {avg_train_loss}")
+
+    # Validation
+    model.eval()
+    val_losses = []
+    for batch in val_dataloader:
+        with torch.no_grad():
+            pixel_values = batch["pixel_values"].to(device)
+            pixel_mask = batch["pixel_mask"].to(device)
+            labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+
+            outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+            loss = criterion(outputs, labels)
+            val_losses.append(loss.item())
+
+    # Print average validation loss for the epoch
+    avg_val_loss = sum(val_losses) / len(val_losses)
+    print(f"Avg. Validation Loss: {avg_val_loss}")
+
+    # Evaluation
+    if (epoch + 1) % 10 == 0:
+        print("Running evaluation...")
+        for idx, batch in enumerate(tqdm(val_dataloader)):
+            pixel_values = batch["pixel_values"].to(device)
+            pixel_mask = batch["pixel_mask"].to(device)
+            labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+
+            with torch.no_grad():
+                outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+
+            orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+            results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+
+            predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+            predictions = prepare_for_coco_detection(predictions)
+            evaluator.update(predictions)
+
+        evaluator.synchronize_between_processes()
+        evaluator.accumulate()
+        evaluator.summarize()
+
+        # Plotting
+        pixel_values, target = val_dataset[0]
+        pixel_values = pixel_values.unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, pixel_mask=None)
+
+        image_id = target['image_id'].item()
+        image = val_dataset.coco.loadImgs(image_id)[0]
+        image = Image.open("Data/image.png")
+
+        width, height = image.size
+        postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
+                                                                             target_sizes=[(height, width)],
+                                                                             threshold=0.0)
+        results = postprocessed_outputs[0]
+        plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0: "ship"})
+
+
+
+# max_epochs = 10
+# for epoch in range(max_epochs):
+#     model.train()
+#     train_losses = []
+#     for batch in train_dataloader:
+#         pixel_values = batch["pixel_values"].to(device)
+#         pixel_mask = batch["pixel_mask"].to(device)
+#         labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+#
+#         optimizer.zero_grad()
+#         outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+#
+#         # Compute loss
+#         loss = criterion(outputs, labels)
+#         train_losses.append(loss.item())
+#
+#         # Backpropagation
+#         loss.backward()
+#         optimizer.step()
+#
+#     # Print average training loss for the epoch
+#     avg_train_loss = sum(train_losses) / len(train_losses)
+#     print(f"Epoch [{epoch + 1}/{max_epochs}], Avg. Train Loss: {avg_train_loss}")
+#
+#     # Validation
+#     model.eval()
+#     val_losses = []
+#     for batch in val_dataloader:
+#         with torch.no_grad():
+#             pixel_values = batch["pixel_values"].to(device)
+#             pixel_mask = batch["pixel_mask"].to(device)
+#             labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]]
+#
+#             outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+#             loss = criterion(outputs, labels)
+#             val_losses.append(loss.item())
+#
+#     # Print average validation loss for the epoch
+#     avg_val_loss = sum(val_losses) / len(val_losses)
+#     print(f"Avg. Validation Loss: {avg_val_loss}")
+#
+# #
+# # initialize evaluator with ground truth (gt)
+# evaluator = CocoEvaluator(coco_gt=val_dataset.coco, iou_types=["bbox"])
+#
+# print("Running evaluation...")
+# for idx, batch in enumerate(tqdm(val_dataloader)):
+#     # get the inputs
+#     pixel_values = batch["pixel_values"].to(device)
+#     pixel_mask = batch["pixel_mask"].to(device)
+#     labels = [{k: v.to(device) for k, v in t.items()} for t in batch["labels"]] # these are in DETR format, resized + normalized
+#
+#     # forward pass
+#     with torch.no_grad():
+#       outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+#
+#     # turn into a list of dictionaries (one item for each example in the batch)
+#     orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
+#     results = detr_processor.post_process_object_detection(outputs, target_sizes=orig_target_sizes, threshold=0)
+#
+#     # provide to metric
+#     # metric expects a list of dictionaries, each item
+#     # containing image_id, category_id, bbox and score keys
+#     predictions = {target['image_id'].item(): output for target, output in zip(labels, results)}
+#     predictions = prepare_for_coco_detection(predictions)
+#     evaluator.update(predictions)
+#
+# evaluator.synchronize_between_processes()
+# evaluator.accumulate()
+# evaluator.summarize()
+#
+# pixel_values, target = val_dataset[0]
+# pixel_values = pixel_values.unsqueeze(0).to(device)
+# print(pixel_values.shape)
+#
+# with torch.no_grad():
+#   # forward pass to get class logits and bounding boxes
+#   outputs = model(pixel_values=pixel_values, pixel_mask=None)
+# print("Outputs:", outputs.keys())
+#
+# # colors for visualization
+#
+#
+#
+# # load image based on ID
+# image_id = target['image_id'].item()
+# image = val_dataset.coco.loadImgs(image_id)[0]
+# image = Image.open("Data/image.png")
+#
+# # postprocess model outputs
+# width, height = image.size
+# postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
+#                                                                 target_sizes=[(height, width)],
+#                                                                 threshold=0.0)
+# results = postprocessed_outputs[0]
+# plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
+#
+
 
 print("end of algorithm")
