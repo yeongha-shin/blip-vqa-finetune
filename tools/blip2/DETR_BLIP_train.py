@@ -298,7 +298,7 @@ for epoch in range(max_epochs):
         outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
         # Compute loss
-        loss = criterion(outputs, labels)
+        loss = criterion(outputs.loss, labels)
         train_losses.append(loss.item())
 
         # Backpropagation
