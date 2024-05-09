@@ -299,7 +299,7 @@ evaluator.synchronize_between_processes()
 evaluator.accumulate()
 evaluator.summarize()
 
-pixel_values, target = val_dataset[0]
+pixel_values, target, text = val_dataset[0]
 pixel_values = pixel_values.unsqueeze(0).to(device)
 print(pixel_values.shape)
 
