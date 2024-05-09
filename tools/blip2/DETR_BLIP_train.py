@@ -11,7 +11,10 @@ from torch.utils.data import DataLoader
 
 import pytorch_lightning as pl
 from transformers import DetrForObjectDetection, AutoProcessor
+from transformers import BitsAndBytesConfig, Blip2ForConditionalGeneration
+
 import torch
+from peft import LoraConfig, get_peft_model
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -55,26 +58,7 @@ class VQADataset(torchvision.datasets.CocoDetection):
 
         return pixel_values, target
 
-def collate_fn(batch):
-  pixel_values = [item[0] for item in batch]
-  encoding = detr_processor.pad(pixel_values, return_tensors="pt")
-  labels = [item[1] for item in batch]
-  processed_batch = {}
-  processed_batch['pixel_values'] = encoding['pixel_values']
-  processed_batch['pixel_mask'] = encoding['pixel_mask']
-  processed_batch['labels'] = labels
 
-  # for key in batch[0].keys():
-  #     if key != "text":
-  #         processed_batch[key] = torch.stack([example[key] for example in batch])
-  #     else:
-  #         text_inputs = blip_processor.tokenizer(
-  #             [example["text"] for example in batch], padding=True, return_tensors="pt"
-  #         )
-  #         processed_batch["input_ids"] = text_inputs["input_ids"]
-  #         processed_batch["attention_mask"] = text_inputs["attention_mask"]
-
-  return processed_batch
 
 #--------------------------------------------------------------------------------------------
 #                                           Model
@@ -84,6 +68,25 @@ def collate_fn(batch):
 blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
 detr_processor = DetrImageProcessor.from_pretrained("facebook/detr-resnet-50")
 
+def collate_fn(batch):
+  pixel_values = [item[0] for item in batch]
+  encoding = detr_processor.pad(pixel_values, return_tensors="pt")
+  labels = [item[1] for item in batch]
+  processed_batch = {}
+  processed_batch['pixel_values'] = encoding['pixel_values']
+  processed_batch['pixel_mask'] = encoding['pixel_mask']
+  processed_batch['labels'] = labels
+
+
+  text_inputs = blip_processor.tokenizer(
+      [example["text"] for example in batch], padding=True, return_tensors="pt"
+  )
+  processed_batch["input_ids"] = text_inputs["input_ids"]
+  processed_batch["attention_mask"] = text_inputs["attention_mask"]
+
+  return processed_batch
+
+
 train_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=True)
 val_dataset = VQADataset(img_folder='./', blip_processor=blip_processor, detr_processor=detr_processor, train=False)
 
@@ -92,16 +95,32 @@ val_dataloader = DataLoader(val_dataset, collate_fn=collate_fn, batch_size=2)
 batch = next(iter(train_dataloader))
 
 
-class Detr(pl.LightningModule):
+class CustomModel(pl.LightningModule):
     def __init__(self, lr, lr_backbone, weight_decay, id2label):
         super().__init__()
         # replace COCO classification head with custom head
         # we specify the "no_timm" variant here to not rely on the timm library
         # for the convolutional backbone
-        self.model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
+        self.detr_model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50",
                                                             revision="no_timm",
                                                             num_labels=len(id2label),
                                                             ignore_mismatched_sizes=True)
+
+        self.blip_model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b",
+                                                                        quantization_config=BitsAndBytesConfig(
+                                                                            load_in_8bit=True))  # Correct initialization
+        self.blip_processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        self.blip_processor.tokenizer.add_tokens("[LOC]")
+
+        self.lora_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            bias="none",
+        )
+        self.blip_model = get_peft_model(self.blip_model, self.lora_config)
+        self.blip_model.print_trainable_parameters()
+
         # see https://github.com/PyTorchLightning/pytorch-lightning/pull/1896
         self.lr = lr
         self.lr_backbone = lr_backbone
@@ -109,7 +128,7 @@ class Detr(pl.LightningModule):
         self.id2label = id2label  # Adding the id2label mapping to the class
 
     def forward(self, pixel_values, pixel_mask):
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        outputs = self.detr_model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
         return outputs
 
@@ -118,7 +137,7 @@ class Detr(pl.LightningModule):
         pixel_mask = batch["pixel_mask"]
         labels = [{k: v.to(self.device) for k, v in t.items()} for t in batch["labels"]]
 
-        outputs = self.model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+        outputs = self.detr_model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         loss = outputs.loss
         loss_dict = outputs.loss_dict
@@ -195,7 +214,7 @@ image.save("ImageDraw.png")
 #                                      Train Part
 #--------------------------------------------------------------------------------------------
 
-model = Detr(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
+model = CustomModel(lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4, id2label={0:"ship"})
 
 outputs = model(pixel_values=batch['pixel_values'], pixel_mask=batch['pixel_mask'])
 
@@ -306,7 +325,21 @@ postprocessed_outputs = detr_processor.post_process_object_detection(outputs,
                                                                 threshold=0.0)
 results = postprocessed_outputs[0]
 
-
 plot_results(image, results['scores'], results['labels'], results['boxes'], id2label={0:"ship"})
+
+#--------------------------------------------------------------------------------------------
+#                                      Evaluation Part
+#--------------------------------------------------------------------------------------------
+
+for idx, batch in enumerate(tqdm(val_dataloader)):
+    # get the inputs
+    input_ids = batch.pop("input_ids").to(device)
+    pixel_values = batch.pop("pixel_values").to(device, torch.float16)
+
+    question = "What kinds of objects are there?"
+
+    generated_output = model.blip_model.generate(input_ids='input_ids', pixel_values='pixel_values',
+                                                 max_length=30)
+    print("LLM output", model.processor.batch_decode(generated_output, skip_special_tokens=True))
 
 print("end of algorithm")
